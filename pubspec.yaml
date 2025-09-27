@@ -1,0 +1,23 @@
+name: LangBridge
+description: App for connecting people with different native languages
+publish_to: 'none' # временно, пока проект не публикуется
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.9.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  camera: ^0.11.0+1
+  video_player: ^2.8.6
+  path_provider: ^2.1.3
+  path: ^1.9.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0
+
+flutter:
+  uses-material-design: true
