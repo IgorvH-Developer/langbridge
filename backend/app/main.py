@@ -11,4 +11,4 @@ app.include_router(chats.router)
 app.include_router(messages.router)
 app.include_router(ws.router)
 
-logger.info("Started DataBase")
+logger.info("Application startup complete.")

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'dart:io';
 import '../models/message.dart';
+import '../screens/chat_screen.dart';
 
 class MessageBubble extends StatefulWidget {
   final Message message;
@@ -36,7 +37,7 @@ class _MessageBubbleState extends State<MessageBubble> {
 
   @override
   Widget build(BuildContext context) {
-    final isUser = widget.message.sender == "user";
+    final isUser = widget.message.sender == currentUserId;
 
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,

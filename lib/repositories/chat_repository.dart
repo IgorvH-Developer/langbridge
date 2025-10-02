@@ -1,43 +1,92 @@
-import 'package:uuid/uuid.dart';
-import '../models/chat.dart';
-import '../models/message.dart';
+import 'dart:developer';
+
+import 'package:flutter/foundation.dart';
+import 'package:uuid/uuid.dart'; // Если все еще нужен для локальных ID
+import 'package:LangBridge/services/chat_socket_service.dart';
+import 'package:LangBridge/models/chat.dart'; // Убедитесь, что модель Chat имеет конструктор fromJson
+import 'package:LangBridge/models/message.dart';
+import 'package:LangBridge/services/api_service.dart'; // Импортируем ApiService
+
+// Константа для фиксированного системного чата, если он вам все еще нужен
+// Если app_chat тоже должен создаваться через API, то эта константа может быть не нужна
+// или использоваться только для его первоначального отображения/поиска.
+const String appChatFixedId = "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a10";
 
 class ChatRepository {
   final _uuid = const Uuid();
+  final ChatSocketService chatSocketService = ChatSocketService();
+  final ApiService _apiService = ApiService(); // Экземпляр ApiService
 
-  // "Системный чат" с приложением
-  final Chat _appChat = Chat(
-    id: "app_chat",
-    title: "Чат с приложением",
-    messages: [
-      Message(
-        id: "welcome",
-        sender: "app",
-        content: "Привет! Это тестовый чат для обмена сообщениями 🚀",
-        type: MessageType.text,
-        timestamp: DateTime.now(),
-      ),
-    ],
-  );
+  // Локальный список чатов, который будет обновляться из API
+  // Используем ValueNotifier для обновления UI списка чатов
+  final ValueNotifier<List<Chat>> _chatsNotifier = ValueNotifier<List<Chat>>([]);
+  ValueNotifier<List<Chat>> get chatsStream => _chatsNotifier;
 
-  Chat get appChat => _appChat;
+  // --- Методы для работы с чатами через API ---
 
-  Chat addMessage(Chat chat, Message message) {
-    final updatedMessages = List<Message>.from(chat.messages)..add(message);
-    return chat.copyWith(messages: updatedMessages);
+  Future<void> fetchChats() async {
+    final chatDataList = await _apiService.getAllChats();
+    if (chatDataList != null) {
+      final chats = chatDataList.map((data) => Chat.fromJson(data)).toList();
+      _chatsNotifier.value = chats;
+    } else {
+      // Обработка ошибки загрузки чатов
+      _chatsNotifier.value = []; // Или показать сообщение об ошибке
+    }
   }
 
-  Message createMessage({
+  Future<Chat?> createNewChat(String title) async {
+    log("creating new chat $title");
+    final chatData = await _apiService.createChat(title);
+    if (chatData != null) {
+      final newChat = Chat.fromJson(chatData);
+      // Опционально: обновить список чатов
+      // await fetchChats(); // Или добавить новый чат в _chatsNotifier.value локально
+      final currentChats = List<Chat>.from(_chatsNotifier.value);
+      currentChats.add(newChat);
+      _chatsNotifier.value = currentChats;
+      return newChat;
+    }
+    log("failed to create new chat $title");
+    return null;
+  }
+
+  // --- Методы для взаимодействия с ChatSocketService ---
+  Future<void> connectToChat(Chat chat) async {
+    // Теперь chat.id должен быть валидным UUID, полученным от API
+    List<Message> initialMessages = chat.initialMessages ?? [];
+
+    // Запрашиваем историю сообщений с сервера
+    final messagesData = await _apiService.getChatMessages(chat.id);
+    if (messagesData != null) {
+      try {
+        initialMessages = messagesData.map((data) => Message.fromJson(data)).toList();
+        log("Successfully fetched and parsed ${initialMessages.length} messages for chat ${chat.id}");
+      } catch (e) {
+        log("Error parsing messages for chat ${chat.id}: $e", error: e);
+        // Оставляем initialMessages пустым или с тем, что было в chat.initialMessages
+      }
+    } else {
+      log("Failed to fetch messages for chat ${chat.id}, using local initialMessages (if any).");
+    }
+
+    chatSocketService.connect(chat.id, initialMessages);
+  }
+
+  void sendChatMessage({
     required String sender,
     required String content,
     MessageType type = MessageType.text,
   }) {
-    return Message(
-      id: _uuid.v4(),
-      sender: sender,
-      content: content,
-      type: type,
-      timestamp: DateTime.now(),
-    );
+    chatSocketService.sendMessage(sender: sender, content: content, type: type);
   }
+
+  void disconnectFromChat() {
+    chatSocketService.disconnect();
+  }
+
+  ValueNotifier<List<Message>> get messagesStream => chatSocketService.messagesNotifier;
+
+// --- Локальные сообщения (если все еще нужны) ---
+// ... (addLocalMessage, createMessage)
 }
