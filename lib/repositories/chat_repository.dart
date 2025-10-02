@@ -1,5 +1,3 @@
-import 'dart:developer';
-
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart'; // Если все еще нужен для локальных ID
 import 'package:LangBridge/services/chat_socket_service.dart';
@@ -36,7 +34,7 @@ class ChatRepository {
   }
 
   Future<Chat?> createNewChat(String title) async {
-    log("creating new chat $title");
+    print("creating new chat $title");
     final chatData = await _apiService.createChat(title);
     if (chatData != null) {
       final newChat = Chat.fromJson(chatData);
@@ -47,7 +45,7 @@ class ChatRepository {
       _chatsNotifier.value = currentChats;
       return newChat;
     }
-    log("failed to create new chat $title");
+    print("failed to create new chat $title");
     return null;
   }
 
@@ -61,13 +59,13 @@ class ChatRepository {
     if (messagesData != null) {
       try {
         initialMessages = messagesData.map((data) => Message.fromJson(data)).toList();
-        log("Successfully fetched and parsed ${initialMessages.length} messages for chat ${chat.id}");
+        print("Successfully fetched and parsed ${initialMessages.length} messages for chat ${chat.id}");
       } catch (e) {
-        log("Error parsing messages for chat ${chat.id}: $e", error: e);
+        print("Error parsing messages for chat ${chat.id}: $e");
         // Оставляем initialMessages пустым или с тем, что было в chat.initialMessages
       }
     } else {
-      log("Failed to fetch messages for chat ${chat.id}, using local initialMessages (if any).");
+      print("Failed to fetch messages for chat ${chat.id}, using local initialMessages (if any).");
     }
 
     chatSocketService.connect(chat.id, initialMessages);

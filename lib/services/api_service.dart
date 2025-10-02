@@ -22,10 +22,10 @@ class ApiService {
       );
 
       if (kDebugMode) {
-        log('Create Chat URL: $url');
-        log('Create Chat Request Body: ${jsonEncode(<String, String>{'title': title})}');
-        log('Create Chat Response Status: ${response.statusCode}');
-        log('Create Chat Response Body: ${response.body}');
+        print('Create Chat URL: $url');
+        print('Create Chat Request Body: ${jsonEncode(<String, String>{'title': title})}');
+        print('Create Chat Response Status: ${response.statusCode}');
+        print('Create Chat Response Body: ${response.body}');
       }
 
       if (response.statusCode == 201) { // HTTP 201 Created
@@ -33,13 +33,13 @@ class ApiService {
       } else {
         // Обработка других кодов состояния (4xx, 5xx)
         if (kDebugMode) {
-          log('Failed to create chat. Status: ${response.statusCode}, Body: ${response.body}');
+          print('Failed to create chat. Status: ${response.statusCode}, Body: ${response.body}');
         }
         return null;
       }
     } catch (e) {
       if (kDebugMode) {
-        log('Error creating chat: $e');
+        print('Error creating chat: $e');
       }
       return null;
     }
@@ -50,9 +50,9 @@ class ApiService {
     try {
       final response = await http.get(url);
       if (kDebugMode) {
-        log('Get All Chats URL: $url');
-        log('Get All Chats Response Status: ${response.statusCode}');
-        log('Get All Chats Response Body: ${response.body}');
+        print('Get All Chats URL: $url');
+        print('Get All Chats Response Status: ${response.statusCode}');
+        print('Get All Chats Response Body: ${response.body}');
       }
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
@@ -62,7 +62,7 @@ class ApiService {
       }
     } catch (e) {
       if (kDebugMode) {
-        log('Error fetching chats: $e');
+        print('Error fetching chats: $e');
       }
       return null;
     }
@@ -73,20 +73,20 @@ class ApiService {
     try {
       final response = await http.get(url);
       if (kDebugMode) {
-        log('Get Chat Messages URL: $url');
-        log('Get Chat Messages Response Status: ${response.statusCode}');
-        log('Get Chat Messages Response Body: ${response.body}');
+        print('Get Chat Messages URL: $url');
+        print('Get Chat Messages Response Status: ${response.statusCode}');
+        print('Get Chat Messages Response Body: ${response.body}');
       }
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
         return data.cast<Map<String, dynamic>>();
       } else {
-        log('Failed to fetch messages for chat $chatId. Status: ${response.statusCode}, Body: ${response.body}');
+        print('Failed to fetch messages for chat $chatId. Status: ${response.statusCode}, Body: ${response.body}');
         return null;
       }
     } catch (e) {
       if (kDebugMode) {
-        log('Error fetching messages for chat $chatId: $e');
+        print('Error fetching messages for chat $chatId: $e');
       }
       return null;
     }

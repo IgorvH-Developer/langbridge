@@ -18,8 +18,8 @@ class Chat {
     return Chat(
       id: json['id'] as String,
       title: json['title'] as String,
-      createdAt: json['created_at'] != null
-          ? DateTime.parse(json['created_at'] as String)
+      createdAt: json['timestamp'] != null
+          ? DateTime.parse(json['timestamp'] as String)
           : null,
       // initialMessages здесь не парсятся, предполагается, что они будут загружены позже
       // или переданы при подключении к WebSocket

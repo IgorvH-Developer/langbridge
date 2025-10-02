@@ -8,7 +8,7 @@ class Chat(Base):
     __tablename__ = "chats"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     title = Column(String, nullable=False)
-    created_at = Column(TIMESTAMP, server_default=func.now())
+    timestamp = Column(TIMESTAMP, server_default=func.now())
     messages = relationship("Message", back_populates="chat")
 
 class Message(Base):
@@ -18,5 +18,5 @@ class Message(Base):
     sender_id = Column(UUID(as_uuid=True))
     content = Column(Text)
     type = Column(String, default="text")
-    created_at = Column(TIMESTAMP, server_default=func.now())
+    timestamp = Column(TIMESTAMP, server_default=func.now())
     chat = relationship("Chat", back_populates="messages")

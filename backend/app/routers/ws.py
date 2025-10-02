@@ -1,7 +1,7 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
 from sqlalchemy.orm import Session
 from uuid import UUID as PyUUID # Импортируем для преобразования и проверки типа
-from datetime import datetime # Для форматирования created_at
+from datetime import datetime # Для форматирования timestamp
 
 from starlette.websockets import WebSocketState
 
@@ -62,8 +62,8 @@ async def websocket_endpoint(
                 chat_id=chat_uuid_obj,  # <--- Используем проверенный объект UUID чата
                 sender_id=sender_uuid_obj, # Используем проверенный объект UUID отправителя
                 content=content,
-                type=data.get("type", "text")
-                # created_at будет установлен БД по server_default
+                type=data.get("type", "text"),
+                timestamp=data.get("timestamp", datetime.now())
             )
             db.add(db_message)
             db.commit()
@@ -78,7 +78,7 @@ async def websocket_endpoint(
                 "sender_id": str(db_message.sender_id),
                 "content": db_message.content,
                 "type": db_message.type,
-                "timestamp": db_message.created_at.isoformat() # Используем ISO формат для datetime
+                "timestamp": db_message.timestamp.isoformat() # Используем ISO формат для datetime
             }
             await manager.broadcast(chat_id_str, message_to_broadcast)
 

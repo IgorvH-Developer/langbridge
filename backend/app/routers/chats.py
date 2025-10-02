@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from typing import List # Added for List type hint
 from .. import models, database, schemas
 from uuid import UUID as PyUUID
 
@@ -23,7 +24,7 @@ async def create_chat(
     try:
         db.add(new_chat)
         db.commit()
-        db.refresh(new_chat) # Чтобы получить сгенерированный id и created_at из БД
+        db.refresh(new_chat) # Чтобы получить сгенерированный id и timestamp из БД
         logger.info(f"Successfully created chat '{new_chat.title}' with ID: {new_chat.id}")
         return new_chat
     except Exception as e:
@@ -35,10 +36,10 @@ async def create_chat(
         )
 
 # --- Существующий эндпоинт для получения сообщений чата (можно оставить здесь же) ---
-# (Убедитесь, что он тоже использует /api префикс, если вы хотите консистентности)
-@router.get("/{chat_id_str}/messages",
-            # response_model=List[schemas.MessageResponse] # Рекомендуется использовать схемы и для сообщений
-            )
+@router.get(
+    "/{chat_id_str}/messages",
+    response_model=List[schemas.MessageResponse] # Updated to use Pydantic schema
+)
 async def get_chat_messages(
         chat_id_str: str,
         db: Session = Depends(database.get_db)
@@ -53,12 +54,11 @@ async def get_chat_messages(
     if not chat:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat not found")
 
-    messages = db.query(models.Message).filter(models.Message.chat_id == chat_uuid).order_by(models.Message.created_at).all()
-    # Здесь тоже хорошо бы возвращать сообщения через Pydantic схемы
+    messages = db.query(models.Message).filter(models.Message.chat_id == chat_uuid).order_by(models.Message.timestamp).all()
     return messages
 
-@router.get("/", response_model=list[schemas.ChatResponse])
+@router.get("/", response_model=List[schemas.ChatResponse])
 async def get_all_chats(skip: int = 0, limit: int = 100, db: Session = Depends(database.get_db)):
     logger.info(f"Request for all chats")
-    chats = db.query(models.Chat).order_by(models.Chat.created_at.desc()).offset(skip).limit(limit).all()
+    chats = db.query(models.Chat).order_by(models.Chat.timestamp.desc()).offset(skip).limit(limit).all()
     return chats

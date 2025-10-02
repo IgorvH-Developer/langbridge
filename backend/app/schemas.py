@@ -11,7 +11,19 @@ class ChatCreate(BaseModel):
 class ChatResponse(BaseModel):
     id: PyUUID
     title: str
-    created_at: datetime
+    timestamp: datetime
 
     class Config:
         orm_mode = True # Позволяет создавать схему из объекта SQLAlchemy
+
+# Схема для ответа с информацией о сообщении
+class MessageResponse(BaseModel):
+    id: PyUUID
+    chat_id: PyUUID
+    sender_id: PyUUID
+    content: str
+    type: str
+    timestamp: datetime
+
+    class Config:
+        orm_mode = True
