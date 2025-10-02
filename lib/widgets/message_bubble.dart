@@ -37,7 +37,7 @@ class _MessageBubbleState extends State<MessageBubble> {
 
   @override
   Widget build(BuildContext context) {
-    final isUser = widget.message.sender == currentUserId;
+    final isUser = widget.message.sender == currentUserFixedId;
 
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
