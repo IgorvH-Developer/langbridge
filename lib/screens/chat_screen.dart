@@ -2,10 +2,10 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
-import 'package:uuid/uuid.dart';
 
 import '../models/chat.dart';
 import '../models/message.dart';
+import '../repositories/auth_repository.dart';
 import '../repositories/chat_repository.dart';
 
 const String currentUserFixedId = "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380c99";
@@ -30,14 +30,25 @@ class _ChatScreenState extends State<ChatScreen> {
   final ImagePicker _picker = ImagePicker(); // Оставляем для выбора видео
 
   // ID текущего пользователя (замените на реальный способ получения)
-  final String _currentUserId = currentUserFixedId; // Пример, получите это из аутентификации
+  String _currentUserId = currentUserFixedId; // Пример, получите это из аутентификации
 
   @override
   void initState() {
     super.initState();
-    print('connecting to chat: ${widget.chat.id}');
-    // Подключаемся к чату при инициализации экрана
-    widget.chatRepository.connectToChat(widget.chat);
+    _loadCurrentUserAndConnect();
+  }
+
+  Future<void> _loadCurrentUserAndConnect() async {
+    // Предполагается, что у вас есть AuthRepository или подобный сервис
+    final userId = await AuthRepository.getCurrentUserId();
+    if (userId != null) {
+      setState(() {
+        _currentUserId = userId;
+      });
+      widget.chatRepository.connectToChat(widget.chat);
+    } else {
+      // Обработка случая, когда ID пользователя не найден
+    }
   }
 
   void _sendMessage() {
