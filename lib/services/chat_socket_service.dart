@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:uuid/uuid.dart';
 
+import 'package:LangBridge/config/app_config.dart';
 import 'package:LangBridge/models/message.dart';
 
 // Интерфейс для обратного вызова при получении нового сообщения
@@ -19,7 +20,9 @@ class ChatSocketService {
   // Замените localhost на ваш реальный IP адрес, если сервер на той же машине и вы тестируете на физическом устройстве.
   // 10.0.2.2 для Android эмулятора, если сервер локально.
   // 'ws://your_server_domain.com/ws/' для развернутого сервера.
-  static const String _socketBaseUrl = "ws://10.0.2.2/ws/"; // Пример для локального сервера и Android эмулятора
+
+  // static const String _socketBaseUrl = "ws://10.0.2.2/ws/"; // Пример для локального сервера и Android эмулятора
+  static final String _socketBaseUrl = "ws://${AppConfig.serverAddr}/ws/"; // Адрес сервера для приложений извне
 
   bool get isConnected => _channel != null && _channelSubscription != null && !_channelSubscription!.isPaused;
 

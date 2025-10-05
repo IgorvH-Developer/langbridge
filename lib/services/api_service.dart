@@ -2,9 +2,12 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:LangBridge/config/app_config.dart';
 import 'package:LangBridge/repositories/auth_repository.dart';
 
-const String _apiBaseUrl = "http://10.0.2.2/api";
+// const String _apiBaseUrl = "http://10.0.2.2/api";
+final String _apiBaseUrl = "http://${AppConfig.serverAddr}/api";
+
 
 class ApiService {
   // Теперь ApiService не зависит от AuthRepository, а только от хранилища

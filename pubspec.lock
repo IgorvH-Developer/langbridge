@@ -37,10 +37,10 @@ packages:
     dependency: transitive
     description:
       name: camera_avfoundation
-      sha256: "98bc06fccfaa8aef0af354f33e314de9c59eedf62bfe10935521607e768d8fef"
+      sha256: cfd435285a984ebbd87573493872944f3c758d5be9e85b305a485e6642ecfd5c
       url: "https://pub.dev"
     source: hosted
-    version: "0.9.21+4"
+    version: "0.9.22"
   camera_platform_interface:
     dependency: transitive
     description:
@@ -166,6 +166,14 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
+  flutter_dotenv:
+    dependency: "direct main"
+    description:
+      name: flutter_dotenv
+      sha256: b7c7be5cd9f6ef7a78429cabd2774d3c4af50e79cb2b7593e3d5d763ef95c61b
+      url: "https://pub.dev"
+    source: hosted
+    version: "5.2.1"
   flutter_lints:
     dependency: "direct dev"
     description:

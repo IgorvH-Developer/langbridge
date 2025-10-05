@@ -1,10 +1,23 @@
-import 'package:LangBridge/repositories/auth_repository.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
+import 'package:LangBridge/config/app_config.dart';
+import 'package:LangBridge/repositories/auth_repository.dart';
 import 'screens/main_screen.dart';
 import 'screens/login_screen.dart';
 
-void main() {
+Future<void> main() async {
+  // 1. Убедимся, что Flutter Engine инициализирован
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // 2. Определяем flavor сборки (по умолчанию 'dev')
+  const flavor = String.fromEnvironment('FLAVOR', defaultValue: 'dev');
+
+  // 3. Загружаем соответствующий .env файл
+  await AppConfig.load(flavor);
+
+  // 4. Запускаем приложение
   runApp(MyApp());
 }
 
@@ -12,12 +25,6 @@ class MyApp extends StatelessWidget {
   MyApp({super.key});
 
   final _authRepository = AuthRepository();
-
-  Future<bool> _checkLoginStatus() async {
-    const storage = FlutterSecureStorage();
-    String? token = await storage.read(key: 'access_token');
-    return token != null;
-  }
 
   @override
   Widget build(BuildContext context) {
