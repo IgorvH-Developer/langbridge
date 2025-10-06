@@ -184,4 +184,24 @@ class ApiService {
       return null;
     }
   }
+
+  Future<String?> getTranscriptionForMessage(String messageId) async {
+    final url = Uri.parse('$_apiBaseUrl/media/transcribe/$messageId');
+    final headers = await _getAuthHeaders();
+    if (!headers.containsKey('Authorization')) return null;
+
+    try {
+      final response = await http.post(url, headers: headers);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(utf8.decode(response.bodyBytes));
+        return data['transcription'];
+      } else {
+        print('Transcription request failed: ${response.statusCode}, Body: ${response.body}');
+        return "[Ошибка запроса транскрипции]";
+      }
+    } catch (e) {
+      print('Error getting transcription: $e');
+      return "[Ошибка сети]";
+    }
+  }
 }

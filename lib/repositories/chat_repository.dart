@@ -98,6 +98,10 @@ class ChatRepository {
     );
   }
 
+  Future<String?> transcribeMessage(String messageId) async {
+    return await _apiService.getTranscriptionForMessage(messageId);
+  }
+
   ValueNotifier<List<Message>> get messagesStream => chatSocketService.messagesNotifier;
 
 // --- Локальные сообщения (если все еще нужны) ---

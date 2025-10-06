@@ -101,7 +101,11 @@ class _ChatScreenState extends State<ChatScreen> {
                   itemCount: messages.length,
                   itemBuilder: (context, index) {
                     final msg = messages[index];
-                    return MessageBubble(message: msg, currentUserId: _currentUserId);
+                    return MessageBubble(
+                      message: msg,
+                      currentUserId: _currentUserId,
+                      chatRepository: widget.chatRepository,
+                    );
                   },
                 );
               },
