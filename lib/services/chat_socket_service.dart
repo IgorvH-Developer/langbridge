@@ -16,8 +16,6 @@ class ChatSocketService {
   StreamSubscription? _channelSubscription;
   final Uuid _uuid = const Uuid();
 
-  // URL вашего WebSocket сервера
-  // Замените localhost на ваш реальный IP адрес, если сервер на той же машине и вы тестируете на физическом устройстве.
   // 10.0.2.2 для Android эмулятора, если сервер локально.
   // 'ws://your_server_domain.com/ws/' для развернутого сервера.
 

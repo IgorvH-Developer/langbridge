@@ -7,6 +7,7 @@ import '../models/chat.dart';
 import '../models/message.dart';
 import '../repositories/auth_repository.dart';
 import '../repositories/chat_repository.dart';
+import '../widgets/message_bubble.dart';
 
 const String currentUserFixedId = "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380c99";
 
@@ -60,22 +61,21 @@ class _ChatScreenState extends State<ChatScreen> {
       type: MessageType.text,
     );
     _textController.clear();
-  }Future<void> _sendVideo() async {
+  }
+
+  Future<void> _sendVideo() async {
     final pickedFile = await _picker.pickVideo(source: ImageSource.camera);
-    if (pickedFile == null) return;
+    if (pickedFile == null || _currentUserId == null) return;
 
-    // В реальном приложении:
-    // 1. Загрузить видео на сервер (например, через HTTP POST запрос).
-    // 2. Получить URL или идентификатор загруженного видео от сервера.
-    // 3. Отправить сообщение через WebSocket с типом 'video' и этим URL/ID.
+    // Показываем индикатор загрузки (опционально)
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Загрузка видео..."), duration: Duration(seconds: 10)),
+    );
 
-    // Пока что для примера отправляем путь к файлу, но это не будет работать
-    // для другого пользователя, так как у него не будет доступа к этому файлу.
-    // Это нужно будет изменить для реальной работы.
-    widget.chatRepository.sendChatMessage(
-      sender: _currentUserId,
-      content: pickedFile.path, // ЗАМЕНИТЬ НА URL после загрузки на сервер
-      type: MessageType.video,
+    await widget.chatRepository.sendVideoMessage(
+      filePath: pickedFile.path,
+      chatId: widget.chat.id,
+      senderId: _currentUserId!,
     );
   }
 
@@ -101,8 +101,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   itemCount: messages.length,
                   itemBuilder: (context, index) {
                     final msg = messages[index];
-                    // Передаем currentUserId в _MessageBubble, чтобы он мог определить, кто отправитель
-                    return _MessageBubble(message: msg, currentUserId: _currentUserId);
+                    return MessageBubble(message: msg, currentUserId: _currentUserId);
                   },
                 );
               },

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:uuid/uuid.dart';
 
 enum MessageType { text, image, video, audio }
@@ -5,9 +7,13 @@ enum MessageType { text, image, video, audio }
 class Message {
   final String id;
   final String sender; // На сервере это может быть sender_id
-  final String content; // для текста это сам текст, для видео – путь к файлу
+  final String content; // Для видео это будет JSON-строка
   final MessageType type;
   final DateTime timestamp;
+
+  // Новые поля для удобного доступа к данным видео
+  String? videoUrl;
+  String? transcription;
 
   Message({
     required this.id,
@@ -15,24 +21,33 @@ class Message {
     required this.content,
     required this.type,
     required this.timestamp,
-  });
+  })
+  {
+    // Парсим content, если это видео
+    if (type == MessageType.video) {
+      try {
+        final data = jsonDecode(content);
+        videoUrl = data['video_url'];
+        transcription = data['transcription'];
+      } catch (e) {
+        // Оставляем поля null, если парсинг не удался
+      }
+    }
+  }
 
-  // Пример factory constructor для создания Message из JSON
   factory Message.fromJson(Map<String, dynamic> json) {
-    String id = json['id'] ?? const Uuid().v4(); // Если сервер не шлет id, генерируем
-    DateTime timestamp = json['timestamp'] != null
-        ? DateTime.parse(json['timestamp']) // Если сервер шлет timestamp
-        : DateTime.now(); // Иначе текущее время
     MessageType type = MessageType.values.firstWhere(
             (e) => e.toString().split('.').last == (json['type'] ?? 'text'),
         orElse: () => MessageType.text);
 
     return Message(
-      id: id,
+      id: json['id'] ?? const Uuid().v4(),
       sender: json['sender_id'] ?? json['sender'] ?? 'unknown_sender',
       content: json['content'] ?? '',
       type: type,
-      timestamp: timestamp,
+      timestamp: json['timestamp'] != null
+          ? DateTime.parse(json['timestamp'])
+          : DateTime.now(),
     );
   }
 }

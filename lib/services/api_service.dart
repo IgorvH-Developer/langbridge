@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:LangBridge/config/app_config.dart';
 import 'package:LangBridge/repositories/auth_repository.dart';
@@ -95,7 +96,6 @@ class ApiService {
     return null;
   }
 
-
   Future<List<Map<String, dynamic>>?> getAllChats() async {
     final url = Uri.parse('$_apiBaseUrl/chats/');
     try {
@@ -139,6 +139,48 @@ class ApiService {
       if (kDebugMode) {
         print('Error fetching messages for chat $chatId: $e');
       }
+      return null;
+    }
+  }
+
+  // Новый метод для загрузки видео
+  Future<Map<String, dynamic>?> uploadVideo({
+    required String filePath,
+    required String chatId,
+    required String senderId,
+  }) async {
+    final url = Uri.parse('$_apiBaseUrl/media/upload/video')
+        .replace(queryParameters: {
+      'chat_id': chatId,
+      'sender_id': senderId,
+    });
+
+    final request = http.MultipartRequest('POST', url);
+
+    // Добавляем токен в заголовки
+    final headers = await _getAuthHeaders();
+    request.headers.addAll(headers);
+
+    // Добавляем файл
+    request.files.add(await http.MultipartFile.fromPath(
+      'file', // Это имя поля должно совпадать с ожидаемым на бэкенде
+      filePath,
+      contentType: MediaType('video', 'mp4'), // Укажите правильный тип
+    ));
+
+    try {
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse); // Преобразуем ответ
+
+      if (response.statusCode == 200) {
+        // Возвращаем тело ответа, которое содержит URL и транскрипцию
+        return jsonDecode(utf8.decode(response.bodyBytes));
+      } else {
+        print('Video upload failed: ${response.statusCode}, Body: ${response.body}');
+        return null;
+      }
+    } catch (e) {
+      print('Error uploading video: $e');
       return null;
     }
   }

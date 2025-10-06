@@ -83,6 +83,21 @@ class ChatRepository {
     chatSocketService.disconnect();
   }
 
+  // Новый метод для отправки видео
+  Future<void> sendVideoMessage({
+    required String filePath,
+    required String chatId,
+    required String senderId,
+  }) async {
+    // Просто вызываем метод API, остальное сделает бэкенд
+    // (отправит WebSocket сообщение после обработки)
+    await _apiService.uploadVideo(
+      filePath: filePath,
+      chatId: chatId,
+      senderId: senderId,
+    );
+  }
+
   ValueNotifier<List<Message>> get messagesStream => chatSocketService.messagesNotifier;
 
 // --- Локальные сообщения (если все еще нужны) ---

@@ -7,9 +7,9 @@ from .. import models, schemas, database, security
 from ..logger import logger
 from jose import JWTError, jwt
 
-router = APIRouter(prefix="/users", tags=["Users"])
+router = APIRouter(prefix="/api/users", tags=["Users"])
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/users/token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/users/token")
 
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(database.get_db)):
     """Декодирует JWT токен и возвращает объект пользователя из БД."""

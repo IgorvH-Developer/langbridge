@@ -6,7 +6,7 @@ from uuid import UUID as PyUUID
 
 from ..logger import logger
 
-router = APIRouter(prefix="/chats", tags=["chats"])
+router = APIRouter(prefix="/api/chats", tags=["chats"])
 
 # --- Эндпоинт для создания нового чата ---
 @router.post("/", response_model=schemas.ChatResponse, status_code=status.HTTP_201_CREATED)

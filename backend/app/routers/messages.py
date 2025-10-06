@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from .. import models, database
 from ..logger import logger
 
-router = APIRouter(prefix="/messages", tags=["messages"])
+router = APIRouter(prefix="/api/messages", tags=["messages"])
 
 @router.post("/")
 def send_message(chat_id: str, sender_id: str, content: str, type: str = "text", db: Session = Depends(database.get_db)):
