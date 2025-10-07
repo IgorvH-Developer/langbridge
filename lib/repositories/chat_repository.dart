@@ -1,9 +1,10 @@
 import 'package:flutter/foundation.dart';
-import 'package:uuid/uuid.dart'; // Если все еще нужен для локальных ID
+import 'package:uuid/uuid.dart';
 import 'package:LangBridge/services/chat_socket_service.dart';
-import 'package:LangBridge/models/chat.dart'; // Убедитесь, что модель Chat имеет конструктор fromJson
+import 'package:LangBridge/models/chat.dart';
 import 'package:LangBridge/models/message.dart';
-import 'package:LangBridge/services/api_service.dart'; // Импортируем ApiService
+import 'package:LangBridge/models/transcription_data.dart';
+import 'package:LangBridge/services/api_service.dart';
 
 // Константа для фиксированного системного чата, если он вам все еще нужен
 // Если app_chat тоже должен создаваться через API, то эта константа может быть не нужна
@@ -105,12 +106,39 @@ class ChatRepository {
     );
   }
 
-  Future<String?> transcribeMessage(String messageId) async {
+  Future<TranscriptionData?> transcribeMessage(String messageId) async {
     return await _apiService.getTranscriptionForMessage(messageId);
   }
 
-  ValueNotifier<List<Message>> get messagesStream => chatSocketService.messagesNotifier;
+  Future<void> fetchAndApplyTranscription(String messageId) async {
+    final transcription = await _apiService.getTranscriptionForMessage(messageId);
+    if (transcription != null) {
+      // Находим сообщение в нашем notifier и обновляем его
+      final currentMessages = List<Message>.from(chatSocketService.messagesNotifier.value);
+      final messageIndex = currentMessages.indexWhere((m) => m.id == messageId);
 
-// --- Локальные сообщения (если все еще нужны) ---
-// ... (addLocalMessage, createMessage)
+      if (messageIndex != -1) {
+        final originalMessage = currentMessages[messageIndex];
+        currentMessages[messageIndex] = originalMessage.withTranscription(transcription);
+        chatSocketService.messagesNotifier.value = currentMessages;
+      }
+    }
+  }
+
+  Future<void> saveTranscription(String messageId, TranscriptionData data) async {
+    final success = await _apiService.updateTranscriptionForMessage(messageId, data);
+    if (success) {
+      // Если успешно сохранено на сервере, обновляем и локально
+      final currentMessages = List<Message>.from(chatSocketService.messagesNotifier.value);
+      final messageIndex = currentMessages.indexWhere((m) => m.id == messageId);
+
+      if (messageIndex != -1) {
+        final originalMessage = currentMessages[messageIndex];
+        currentMessages[messageIndex] = originalMessage.withTranscription(data);
+        chatSocketService.messagesNotifier.value = currentMessages;
+      }
+    }
+  }
+
+  ValueNotifier<List<Message>> get messagesStream => chatSocketService.messagesNotifier;
 }

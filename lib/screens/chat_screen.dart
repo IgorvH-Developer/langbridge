@@ -110,22 +110,17 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.chat.title ?? "Чат")), // <<< Обновлено для личных чатов
+      appBar: AppBar(title: Text(widget.chat.title ?? "Чат")),
       body: Column(
         children: [
           Expanded(
-            // Слушаем изменения в ValueNotifier из ChatRepository
             child: ValueListenableBuilder<List<Message>>(
               valueListenable: widget.chatRepository.messagesStream,
               builder: (context, messages, child) {
-                // Если список сообщений пуст, можно показать заглушку
-                if (messages.isEmpty && widget.chat.id != appChatFixedId && !widget.chatRepository.chatSocketService.isConnected) {
-                  return const Center(child: Text("Подключение к чату..."));
-                } else if (messages.isEmpty) {
-                  return const Center(child: Text("Нет сообщений. Начните диалог!"));
+                if (messages.isEmpty) {
+                  return const Center(child: Text("Нет сообщений."));
                 }
                 return ListView.builder(
-                  reverse: false, // Или true, если хотите, чтобы ввод был снизу, а сообщения добавлялись сверху
                   itemCount: messages.length,
                   itemBuilder: (context, index) {
                     final msg = messages[index];
@@ -164,6 +159,35 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
               ],
             ),
+          ),
+          _buildMessageComposer(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMessageComposer() {
+    return Padding(
+      padding: const EdgeInsets.all(8.0),
+      child: Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.videocam),
+            onPressed: _sendVideo,
+          ),
+          Expanded(
+            child: TextField(
+              controller: _textController,
+              decoration: const InputDecoration(
+                hintText: "Введите сообщение...",
+                border: OutlineInputBorder(),
+              ),
+              onSubmitted: (_) => _sendMessage(),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.send),
+            onPressed: _sendMessage,
           ),
         ],
       ),

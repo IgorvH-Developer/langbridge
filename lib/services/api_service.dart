@@ -5,11 +5,11 @@ import 'package:http_parser/http_parser.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:LangBridge/config/app_config.dart';
 import 'package:LangBridge/models/user_profile.dart';
+import 'package:LangBridge/models/transcription_data.dart';
 import 'package:LangBridge/repositories/auth_repository.dart';
 
 // const String _apiBaseUrl = "http://10.0.2.2/api";
 final String _apiBaseUrl = "http://${AppConfig.serverAddr}/api";
-
 
 class ApiService {
   // Теперь ApiService не зависит от AuthRepository, а только от хранилища
@@ -232,26 +232,6 @@ class ApiService {
     }
   }
 
-  Future<String?> getTranscriptionForMessage(String messageId) async {
-    final url = Uri.parse('$_apiBaseUrl/media/transcribe/$messageId');
-    final headers = await _getAuthHeaders();
-    if (!headers.containsKey('Authorization')) return null;
-
-    try {
-      final response = await http.post(url, headers: headers);
-      if (response.statusCode == 200) {
-        final data = jsonDecode(utf8.decode(response.bodyBytes));
-        return data['transcription'];
-      } else {
-        print('Transcription request failed: ${response.statusCode}, Body: ${response.body}');
-        return "[Ошибка запроса транскрипции]";
-      }
-    } catch (e) {
-      print('Error getting transcription: $e');
-      return "[Ошибка сети]";
-    }
-  }
-
   Future<bool> updateUserLanguages(String userId, List<Map<String, dynamic>> languagesData) async {
     final url = Uri.parse('$_apiBaseUrl/users/$userId/languages');
     final headers = await _getAuthHeaders();
@@ -263,5 +243,43 @@ class ApiService {
       body: jsonEncode(languagesData),
     );
     return response.statusCode == 204; // 204 No Content
+  }
+
+  Future<TranscriptionData?> getTranscriptionForMessage(String messageId) async {
+    final url = Uri.parse('$_apiBaseUrl/media/transcribe/$messageId');
+    final headers = await _getAuthHeaders();
+    if (!headers.containsKey('Authorization')) return null;
+
+    try {
+      final response = await http.post(url, headers: headers);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(utf8.decode(response.bodyBytes));
+        return TranscriptionData.fromJson(data);
+      } else {
+        print('Transcription request failed: ${response.statusCode}, Body: ${response.body}');
+        return null;
+      }
+    } catch (e) {
+      print('Error getting transcription: $e');
+      return null;
+    }
+  }
+
+  Future<bool> updateTranscriptionForMessage(String messageId, TranscriptionData data) async {
+    final url = Uri.parse('$_apiBaseUrl/media/transcribe/$messageId');
+    final headers = await _getAuthHeaders();
+    if (!headers.containsKey('Authorization')) return false;
+
+    try {
+      final response = await http.put(
+        url,
+        headers: headers,
+        body: jsonEncode(data.toJson()),
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      print('Error updating transcription: $e');
+      return false;
+    }
   }
 }

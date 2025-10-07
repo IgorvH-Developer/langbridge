@@ -1,4 +1,5 @@
 # backend/tests/test_media.py
+import os
 
 import pytest
 from unittest.mock import patch, MagicMock
@@ -13,7 +14,7 @@ auth_token = None
 
 @pytest.fixture(scope="module", autouse=True)
 def setup_for_media_tests(client): # Зависимость от фикстуры client
-    """Создает пользователя и чат один раз для всех тестов в этом модуле.""" 
+    """Создает пользователя и чат один раз для всех тестов в этом модуле."""
     global created_user_id, created_chat_id, auth_token
     # 1. Создаем пользователя
     user_response = client.post("/api/users/register", json={"username": "mediauser", "password": "mediapass"})
@@ -38,9 +39,14 @@ def test_upload_video(client):
     """Тест: Успешная загрузка видео (без транскрипции)."""
     global created_message_id
     video_content = b"fake video bytes"
+    # Для теста создаем файл на диске, чтобы os.path.exists работал
+    os.makedirs("/uploads", exist_ok=True)
+    with open("/uploads/test_video.mp4", "wb") as f:
+        f.write(video_content)
+
     response = client.post(
         f"/api/media/upload/video?chat_id={created_chat_id}&sender_id={created_user_id}",
-        files={"file": ("test.mp4", io.BytesIO(video_content), "video/mp4")},
+        files={"file": ("test_video.mp4", io.BytesIO(video_content), "video/mp4")},
         headers={"Authorization": f"Bearer {auth_token}"}
     )
     assert response.status_code == 200
@@ -48,52 +54,77 @@ def test_upload_video(client):
     assert data["url"].startswith("/uploads/")
     created_message_id = data["message_id"]
 
-# Патчим os.remove, т.к. временный .wav файл в тесте реально не создается
-@patch('app.routers.media.os.remove')
-@patch('speech_recognition.AudioFile')
-@patch('speech_recognition.Recognizer.record')
-@patch('speech_recognition.Recognizer.recognize_google')
-@patch('pydub.AudioSegment.from_file')
-def test_transcribe_video_on_demand(mock_from_file, mock_recognize_google, mock_record, mock_audio_file, mock_os_remove, client):
+@patch('app.routers.media.os.path.exists')
+@patch('app.routers.media.stable_whisper.load_model')
+@patch('app.routers.media.uuid.uuid4')
+def test_transcribe_video_on_demand(mock_uuid4, mock_load_model, mock_os_path_exists, client):
     """
-    Тест: Запрос транскрипции с полной подменой всех зависимостей и проверкой кеширования.
+    Тест: Запрос транскрипции с использованием stable-whisper и проверкой кеширования.
     """
-    assert created_message_id is not None, "Требуется ID сообщения из предыдущего теста"
+    assert created_message_id is not None, "Требуется ID сообщения из теста test_upload_video"
 
     # 1. Настраиваем моки
-    mock_audio_segment = MagicMock()
-    mock_audio_segment.export.return_value = None # Мокаем метод export
-    mock_from_file.return_value = mock_audio_segment
+    mock_os_path_exists.return_value = True
 
-    mock_recognize_google.return_value = "Это распознанный текст."
-    mock_audio_file.return_value.__enter__.return_value = MagicMock() # Для 'with' statement
-    mock_record.return_value = MagicMock() # 'record' теперь тоже подменен
+    # Настройка мока для stable_whisper
+    mock_model = MagicMock()
+    mock_load_model.return_value = mock_model
+
+    # Создаем мок-объекты для слов и сегментов
+    mock_word1 = MagicMock()
+    mock_word1.word = "Это"
+    mock_word1.start = 0.1
+    mock_word1.end = 0.5
+
+    mock_word2 = MagicMock()
+    mock_word2.word = "тест."
+    mock_word2.start = 0.6
+    mock_word2.end = 1.0
+
+    mock_segment = MagicMock()
+    mock_segment.words = [mock_word1, mock_word2]
+
+    # Настройка результата транскрипции
+    mock_transcribe_result = MagicMock()
+    mock_transcribe_result.text = "Это тест."
+    mock_transcribe_result.segments = [mock_segment]
+    mock_model.transcribe.return_value = mock_transcribe_result
+
+    # Настройка мока для uuid
+    mock_uuid4.side_effect = ['uuid-word-1', 'uuid-word-2']
 
     # --- ПЕРВЫЙ ЗАПРОС: Транскрипция и сохранение в БД ---
     response = client.post(f"/api/media/transcribe/{created_message_id}", headers={"Authorization": f"Bearer {auth_token}"})
 
-    # Проверяем успешный ответ и правильный текст
+    # Проверяем успешный ответ
     assert response.status_code == 200
-    assert response.json()["transcription"] == "Это распознанный текст."
+
+    # Проверяем структуру и данные ответа
+    response_data = response.json()
+    expected_data = {
+        "full_text": "Это тест.",
+        "words": [
+            {"word": "Это", "start": 0.1, "end": 0.5, "id": "uuid-word-1"},
+            {"word": "тест.", "start": 0.6, "end": 1.0, "id": "uuid-word-2"}
+        ]
+    }
+    assert response_data == expected_data
 
     # Проверяем, что все "обманки" были вызваны ровно один раз
-    mock_from_file.assert_called_once()
-    mock_recognize_google.assert_called_once()
-    mock_audio_file.assert_called_once()
-    mock_record.assert_called_once()
-    mock_os_remove.assert_called_once() # Проверяем, что была попытка удалить временный файл
+    mock_os_path_exists.assert_called_once()
+    mock_load_model.assert_called_once()
+    mock_model.transcribe.assert_called_once()
+    assert mock_uuid4.call_count == 2
 
     # --- ВТОРОЙ ЗАПРОС: Результат должен браться из кеша (БД) ---
     response_again = client.post(f"/api/media/transcribe/{created_message_id}", headers={"Authorization": f"Bearer {auth_token}"})
 
-    # Проверяем, что ответ все еще успешный и текст тот же
+    # Проверяем, что ответ все еще успешный и данные те же
     assert response_again.status_code == 200
-    assert response_again.json()["transcription"] == "Это распознанный текст."
+    assert response_again.json() == expected_data
 
     # САМОЕ ГЛАВНОЕ: Проверяем, что "обманки" НЕ были вызваны снова.
-    # Все они должны были быть вызваны только один раз в рамках первого запроса.
-    mock_from_file.assert_called_once()
-    mock_recognize_google.assert_called_once()
-    mock_audio_file.assert_called_once()
-    mock_record.assert_called_once()
-    mock_os_remove.assert_called_once()
+    mock_os_path_exists.assert_called_once()
+    mock_load_model.assert_called_once()
+    mock_model.transcribe.assert_called_once()
+    assert mock_uuid4.call_count == 2 # Количество вызовов не изменилось
