@@ -1,0 +1,29 @@
+# Этот файл будет использоваться для локальной разработки и тестов
+# Он переопределяет или дополняет сервисы из основного docker-compose.yml
+
+version: "3.8"
+
+services:
+  backend: # Переопределяем сервис `backend`
+    build:
+      context: .
+      # Используем специальный Dockerfile для тестов, который установит dev-зависимости
+      dockerfile: Dockerfile
+    volumes:
+      - ./app:/app/app
+      - ./tests:/app/tests # Добавляем папку с тестами в контейнер
+    # Команда по умолчанию остается прежней (uvicorn), чтобы можно было работать локально
+
+  test-runner: # Создаем НОВЫЙ сервис специально для запуска тестов
+    build: .
+    volumes:
+      - ./app:/app/app
+      - ./tests:/app/tests
+    # Устанавливаем переменную окружения, чтобы приложение использовало SQLite для тестов
+    environment:
+      - DATABASE_URL=sqlite:///./test.db
+    # Эта команда будет выполнена при запуске `docker-compose up test-runner`
+    command: pytest -v --cov=app --cov-report=term-missing
+    # Зависимость от `db` больше не нужна
+    # depends_on:
+    #   - db

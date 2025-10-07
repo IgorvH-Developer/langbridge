@@ -36,7 +36,7 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
 @router.post("/register", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED)
 async def register_user(user_data: schemas.UserCreate, db: Session = Depends(database.get_db)):
     """Регистрирует нового пользователя."""
-    logger.info(f"Attempting to register new user: '{user_data.username}'")
+    logger.debug(f"Attempting to register new user: '{user_data.username}'")
     db_user = db.query(models.User).filter(models.User.username == user_data.username).first()
     if db_user:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Username already registered")
@@ -53,6 +53,7 @@ async def register_user(user_data: schemas.UserCreate, db: Session = Depends(dat
 @router.post("/token", response_model=schemas.Token)
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(database.get_db)):
     """Предоставляет JWT токен при успешном входе."""
+    logger.debug(f"getting tocker: {form_data}, {db}")
     user = db.query(models.User).filter(models.User.username == form_data.username).first()
     if not user or not security.verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
@@ -71,6 +72,7 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 
 @router.get("/me", response_model=schemas.UserResponse)
 async def read_users_me(current_user: models.User = Depends(get_current_user)):
+    logger.debug(f"getting user me: {current_user}")
     """Возвращает профиль текущего аутентифицированного пользователя."""
     return current_user
 
@@ -80,6 +82,7 @@ async def update_user_me(
         current_user: models.User = Depends(get_current_user),
         db: Session = Depends(database.get_db)
 ):
+    logger.debug(f"updating user me: {user_update}, {current_user}, {db}")
     """Обновляет профиль текущего пользователя."""
     update_data = user_update.model_dump(exclude_unset=True) # Используем model_dump
     for key, value in update_data.items():

@@ -12,3 +12,6 @@ python-multipart==0.0.9
 pydub
 speechrecognition
 ffmpeg-python
+pytest
+httpx
+pytest-cov

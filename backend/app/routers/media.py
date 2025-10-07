@@ -24,6 +24,7 @@ async def upload_video(
         file: UploadFile = File(...),
         db: Session = Depends(database.get_db)
 ):
+    logger.info(f"uploading video: {chat_id}, {sender_id}, {file}, {db}")
     try:
         chat_uuid = uuid.UUID(chat_id)
         sender_uuid = uuid.UUID(sender_id)
@@ -80,6 +81,7 @@ async def transcribe_video_message(
         message_id_str: str,
         db: Session = Depends(database.get_db)
 ):
+    logger.info(f"transcribing video: {message_id_str}, {db}")
     try:
         message_uuid = uuid.UUID(message_id_str)
     except ValueError:
