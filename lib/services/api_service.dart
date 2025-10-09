@@ -131,30 +131,29 @@ class ApiService {
     return null;
   }
 
-  // --- Chats (остаются как были) ---
-  Future<Map<String, dynamic>?> createChat(String title) async {
-    final url = Uri.parse('$_apiBaseUrl/chats/');
+  // --- Chats ---
+
+  Future<Map<String, dynamic>?> getOrCreatePrivateChat(String partnerId) async {
+    final url = Uri.parse('$_apiBaseUrl/chats/get-or-create/private')
+        .replace(queryParameters: {'partner_id': partnerId});
     final headers = await _getAuthHeaders();
-    final response = await http.post(
-      url,
-      headers: headers,
-      body: jsonEncode(<String, String>{'title': title}),
-    );
-    if (response.statusCode == 201) {
-      return jsonDecode(response.body);
+    if (!headers.containsKey('Authorization')) return null;
+
+    final response = await http.post(url, headers: headers);
+    if (response.statusCode == 200) {
+      return jsonDecode(utf8.decode(response.bodyBytes));
     }
     return null;
   }
 
   Future<List<Map<String, dynamic>>?> getAllChats() async {
     final url = Uri.parse('$_apiBaseUrl/chats/');
+    final headers = await _getAuthHeaders();
     try {
-      final response = await http.get(url);
-      if (kDebugMode) {
-        print('Get All Chats URL: $url');
-        print('Get All Chats Response Status: ${response.statusCode}');
-        print('Get All Chats Response Body: ${response.body}');
-      }
+      final response = await http.get(url, headers: headers); // <<< ПЕРЕДАЕМ ЗАГОЛОВОК
+      print('Get All Chats URL: $url');
+      print('Get All Chats Response Status: ${response.statusCode}');
+      print('Get All Chats Response Body: ${response.body}');
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
         return data.cast<Map<String, dynamic>>();
@@ -162,11 +161,9 @@ class ApiService {
         return null;
       }
     } catch (e) {
-      if (kDebugMode) {
-        print('Error fetching chats: $e');
-      }
-      return null;
+      print('Error fetching chats: $e');
     }
+    return null;
   }
 
   Future<List<Map<String, dynamic>>?> getChatMessages(String chatId) async {

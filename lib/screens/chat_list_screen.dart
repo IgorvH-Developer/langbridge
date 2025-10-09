@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../repositories/chat_repository.dart';
 import 'chat_screen.dart';
 import '../models/chat.dart'; // Импорт модели Chat
+import '../repositories/auth_repository.dart'; // <<< ДОБАВЛЕН ИМПОРТ
 
 class ChatListScreen extends StatefulWidget {
   const ChatListScreen({super.key});
@@ -16,6 +17,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
   // Для простоты примера создадим здесь, но лучше использовать DI/Provider.
   final ChatRepository _chatRepository = ChatRepository();
   bool _isLoading = true;
+  String? _currentUserId; // <<< ДОБАВЛЕНО ПОЛЕ ДЛЯ ID ПОЛЬЗОВАТЕЛЯ
 
   @override
   void initState() {
@@ -23,11 +25,24 @@ class _ChatListScreenState extends State<ChatListScreen> {
     _loadChats();
   }
 
+  // <<< МЕТОД ОБНОВЛЕН ДЛЯ ЗАГРУЗКИ ID ПОЛЬЗОВАТЕЛЯ
   Future<void> _loadChats() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
-    await _chatRepository.fetchChats();
+
+    // Одновременно запрашиваем ID пользователя и чаты для ускорения
+    final userIdFuture = AuthRepository.getCurrentUserId();
+    final fetchChatsFuture = _chatRepository.fetchChats();
+
+    // Дожидаемся обоих результатов
+    final userId = await userIdFuture;
+    await fetchChatsFuture;
+
     if (mounted) {
-      setState(() => _isLoading = false);
+      setState(() {
+        _currentUserId = userId;
+        _isLoading = false;
+      });
     }
   }
 
@@ -109,8 +124,25 @@ class _ChatListScreenState extends State<ChatListScreen> {
             itemCount: chats.length,
             itemBuilder: (context, index) {
               final chat = chats[index];
+              String displayTitle;
+              // Если у чата есть название, используем его.
+              if (chat.title != null && chat.title!.isNotEmpty) {
+                displayTitle = chat.title!;
+              } else {
+                // Иначе, это личный чат. Ищем собеседников.
+                final otherParticipants = chat.participants.where((p) => p.id != _currentUserId);
+                if (otherParticipants.isNotEmpty) {
+                  // Отображаем имена всех других участников через запятую.
+                  displayTitle = otherParticipants.map((p) => p.username).join(', ');
+                } else {
+                  // Запасной вариант, если в чате нет других участников.
+                  displayTitle = "Чат";
+                }
+              }
+              // <<< КОНЕЦ ИЗМЕНЕНИЙ
+
               return ListTile(
-                title: Text(chat.title),
+                title: Text(displayTitle), // ИСПРАВЛЕНО
                 subtitle: Text("ID: ${chat.id.substring(0,8)}..."), // Показываем часть ID
                 onTap: () {
                   // Перед переходом в ChatScreen, убеждаемся, что chat.id есть

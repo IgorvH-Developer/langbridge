@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/chat.dart';
 import '../models/message.dart';
@@ -30,13 +31,40 @@ class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _textController = TextEditingController();
   final ImagePicker _picker = ImagePicker(); // Оставляем для выбора видео
 
-  // ID текущего пользователя (замените на реальный способ получения)
-  String _currentUserId = currentUserFixedId; // Пример, получите это из аутентификации
+  String _currentUserId = '';
 
   @override
   void initState() {
     super.initState();
     _loadCurrentUserAndConnect();
+    _loadDraft(); // <<< Загружаем черновик при открытии
+  }
+
+  Future<void> _loadDraft() async {
+    final prefs = await SharedPreferences.getInstance();
+    final draft = prefs.getString('draft_${widget.chat.id}');
+    if (draft != null) {
+      _textController.text = draft;
+    }
+  }
+
+  Future<void> _saveDraft(String text) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (text.trim().isEmpty) {
+      // Если поле пустое, удаляем черновик
+      await prefs.remove('draft_${widget.chat.id}');
+    } else {
+      await prefs.setString('draft_${widget.chat.id}', text);
+    }
+  }
+
+  @override
+  void dispose() {
+    // Сохраняем черновик перед закрытием экрана
+    _saveDraft(_textController.text);
+    widget.chatRepository.disconnectFromChat();
+    _textController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadCurrentUserAndConnect() async {
@@ -82,7 +110,7 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.chat.title)), // Используем title из переданного chat
+      appBar: AppBar(title: Text(widget.chat.title ?? "Чат")), // <<< Обновлено для личных чатов
       body: Column(
         children: [
           Expanded(
@@ -111,7 +139,7 @@ class _ChatScreenState extends State<ChatScreen> {
               },
             ),
           ),
-          Padding( // Обернул Row в Padding для отступов
+          Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
             child: Row(
               children: [
@@ -124,8 +152,9 @@ class _ChatScreenState extends State<ChatScreen> {
                     controller: _textController,
                     decoration: const InputDecoration(
                       hintText: "Введите сообщение...",
-                      border: OutlineInputBorder(), // Добавил границу для наглядности
+                      border: OutlineInputBorder(),
                     ),
+                    onChanged: _saveDraft,
                     onSubmitted: (_) => _sendMessage(),
                   ),
                 ),
@@ -139,14 +168,6 @@ class _ChatScreenState extends State<ChatScreen> {
         ],
       ),
     );
-  }
-
-  @override
-  void dispose() {
-    // Отключаемся от чата при закрытии экрана
-    widget.chatRepository.disconnectFromChat();
-    _textController.dispose();
-    super.dispose();
   }
 }
 

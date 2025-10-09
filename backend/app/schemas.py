@@ -60,6 +60,15 @@ class UserProfileResponse(BaseModel):
     class Config:
         from_attributes = True
 
+# Добавим простую схему для участника чата
+class ParticipantResponse(BaseModel):
+    id: PyUUID
+    username: str
+    avatar_url: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
 # Упрощенная схема для списков пользователей
 class UserInListResponse(BaseModel):
     id: PyUUID
@@ -87,8 +96,9 @@ class ChatCreate(BaseModel):
 # Схема для ответа с информацией о чате
 class ChatResponse(BaseModel):
     id: PyUUID
-    title: str
+    title: Optional[str] = None
     timestamp: datetime
+    participants: List[ParticipantResponse] = []
 
     class Config:
         from_attributes = True

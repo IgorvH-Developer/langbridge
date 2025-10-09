@@ -1,6 +1,6 @@
 import uuid
 from sqlalchemy import Column, String, Text, ForeignKey, TIMESTAMP, func, Integer, Table, types
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from .database import Base
 
@@ -47,6 +47,11 @@ user_languages = Table('user_languages', Base.metadata,
                        Column('level', String(50)), # e.g., 'A1', 'B2', 'Native'
                        Column('type', String(20), default='learning', primary_key=True) # 'native' or 'learning'
                        )
+# --- ПРОМЕЖУТОЧНАЯ ТАБЛИЦА ДЛЯ УЧАСТНИКОВ ЧАТА ---
+chat_participants = Table('chat_participants', Base.metadata,
+                          Column('user_id', GUID, ForeignKey('users.id', ondelete="CASCADE"), primary_key=True),
+                          Column('chat_id', GUID, ForeignKey('chats.id', ondelete="CASCADE"), primary_key=True)
+                          )
 
 # --- Таблица для хранения языков ---
 class Language(Base):
@@ -76,13 +81,16 @@ class User(Base):
     # Связи
     messages_sent = relationship("Message", back_populates="sender")
     languages = relationship("Language", secondary=user_languages, back_populates="users")
+    chats = relationship("Chat", secondary=chat_participants, back_populates="participants")
 
 class Chat(Base):
     __tablename__ = "chats"
     id = Column(GUID(), primary_key=True, default=uuid.uuid4)
-    title = Column(String, nullable=False)
+    title = Column(String, nullable=True)
     timestamp = Column(TIMESTAMP, server_default=func.now())
-    messages = relationship("Message", back_populates="chat")
+
+    messages = relationship("Message", back_populates="chat", cascade="all, delete-orphan")
+    participants = relationship("User", secondary=chat_participants, back_populates="chats")
 
 class Message(Base):
     __tablename__ = "messages"
@@ -92,5 +100,7 @@ class Message(Base):
     content = Column(Text)
     type = Column(String, default="text")
     timestamp = Column(TIMESTAMP, server_default=func.now())
+
+    # Связи (одно сообщение -> один чат, одно сообщение -> один отправитель)
     chat = relationship("Chat", back_populates="messages")
     sender = relationship("User", back_populates="messages_sent")

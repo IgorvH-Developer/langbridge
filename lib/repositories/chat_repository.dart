@@ -28,14 +28,21 @@ class ChatRepository {
       final chats = chatDataList.map((data) => Chat.fromJson(data)).toList();
       _chatsNotifier.value = chats;
     } else {
-      // Обработка ошибки загрузки чатов
-      _chatsNotifier.value = []; // Или показать сообщение об ошибке
+      _chatsNotifier.value = [];
     }
+  }
+
+  Future<Chat?> getOrCreatePrivateChat(String partnerId) async {
+    final chatData = await _apiService.getOrCreatePrivateChat(partnerId);
+    if (chatData != null) {
+      return Chat.fromJson(chatData);
+    }
+    return null;
   }
 
   Future<Chat?> createNewChat(String title) async {
     print("creating new chat $title");
-    final chatData = await _apiService.createChat(title);
+    final chatData = await _apiService.getOrCreatePrivateChat(title);
     if (chatData != null) {
       final newChat = Chat.fromJson(chatData);
       // Опционально: обновить список чатов

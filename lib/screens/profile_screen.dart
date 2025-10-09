@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:LangBridge/models/user_profile.dart';
+import 'package:LangBridge/screens/chat_screen.dart';
 import 'package:LangBridge/services/api_service.dart';
 import 'package:LangBridge/repositories/auth_repository.dart';
+import 'package:LangBridge/repositories/chat_repository.dart';
 import 'edit_profile_screen.dart';
 import 'login_screen.dart';
 
@@ -16,6 +18,8 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final _apiService = ApiService();
   final _authRepository = AuthRepository();
+  final _chatRepository = ChatRepository();
+
   UserProfile? _profile;
   bool _isLoading = true;
   bool _isMyProfile = false;
@@ -24,6 +28,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void initState() {
     super.initState();
     _loadProfile();
+  }
+
+  void _startChat() async {
+    if (_profile == null) return;
+
+    // Показываем индикатор загрузки
+    showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(child: CircularProgressIndicator())
+    );
+
+    // Запрашиваем чат с этим пользователем
+    final chat = await _chatRepository.getOrCreatePrivateChat(_profile!.id);
+
+    Navigator.of(context).pop(); // Закрываем диалог загрузки
+
+    if (chat != null && mounted) {
+      // Переходим на экран чата
+      Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => ChatScreen(
+          chat: chat,
+          chatRepository: _chatRepository,
+        ),
+      ));
+    } else {
+      // Показываем ошибку
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Не удалось создать чат."))
+      );
+    }
   }
 
   Future<void> _loadProfile() async {
@@ -92,6 +127,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
             IconButton(onPressed: _editProfile, icon: const Icon(Icons.edit), tooltip: 'Редактировать'),
           if (_isMyProfile)
             IconButton(onPressed: _logout, icon: const Icon(Icons.logout), tooltip: 'Выйти'),
+          // --- КНОПКА "НАПИСАТЬ СООБЩЕНИЕ" ---
+          if (!_isMyProfile)
+            IconButton(
+              icon: const Icon(Icons.message),
+              onPressed: _startChat,
+              tooltip: "Написать сообщение",
+            ),
         ],
       ),
       body: _buildBody(),
