@@ -20,20 +20,19 @@ class AuthRepository {
   /// Производит вход пользователя, получает и сохраняет токен и ID пользователя.
   /// Возвращает `true` при успехе, иначе `false`.
   Future<bool> login(String username, String password) async {
-    final token = await _apiService.loginAndGetToken(username, password);
-    if (token == null) {
-      return false;
-    }
-    await _storage.write(key: accessTokenKey, value: token);
+    final loginData = await _apiService.loginAndGetData(username, password);
 
-    final profile = await _apiService.getMyProfile();
-    if (profile != null && profile['id'] != null) {
-      await _storage.write(key: userIdKey, value: profile['id']);
-      return true;
-    } else {
-      await logout();
+    if (loginData == null || loginData['access_token'] == null || loginData['user_id'] == null) {
       return false;
     }
+
+    final token = loginData['access_token']!;
+    final userId = loginData['user_id']!;
+
+    await _storage.write(key: accessTokenKey, value: token);
+    await _storage.write(key: userIdKey, value: userId);
+
+    return true;
   }
 
   /// Регистрирует нового пользователя.

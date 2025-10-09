@@ -39,37 +39,44 @@ class GUID(types.TypeDecorator):
                 value = uuid.UUID(value)
             return value
 
-# --- Таблица для связи "многие ко многим" между пользователями и языками ---
+# Промежуточная таблица для связи "многие ко многим" между пользователями и языками
+# Добавляем поле 'type' для разделения на 'native', 'learning'
 user_languages = Table('user_languages', Base.metadata,
                        Column('user_id', GUID(), ForeignKey('users.id', ondelete="CASCADE"), primary_key=True),
                        Column('language_id', Integer, ForeignKey('languages.id', ondelete="CASCADE"), primary_key=True),
-                       Column('level', String(50))
+                       Column('level', String(50)), # e.g., 'A1', 'B2', 'Native'
+                       Column('type', String(20), default='learning', primary_key=True) # 'native' or 'learning'
                        )
 
 # --- Таблица для хранения языков ---
 class Language(Base):
     __tablename__ = "languages"
     id = Column(Integer, primary_key=True)
-    name = Column(String(100), unique=True, nullable=False)
-    code = Column(String(10), unique=True, nullable=False)
+    name = Column(String(100), unique=True, nullable=False) # e.g., "Русский", "English"
+    code = Column(String(10), unique=True, nullable=False) # e.g., "ru", "en"
+    users = relationship("User", secondary=user_languages, back_populates="languages")
 
-# --- Новая модель пользователя ---
+# --- МОДЕЛЬ ПОЛЬЗОВАТЕЛЯ ---
 class User(Base):
     __tablename__ = "users"
     id = Column(GUID(), primary_key=True, default=uuid.uuid4)
     username = Column(String(100), unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
+
+    # Новые поля профиля
     full_name = Column(String(150))
+    gender = Column(String(50))
     age = Column(Integer)
+    country = Column(String(100))
+    height = Column(Integer) # в сантиметрах
     bio = Column(Text)
     avatar_url = Column(String)
-    interests = Column(Text)
+    interests = Column(Text) # Можно хранить как строку с разделителями, например "спорт, музыка, кино"
+
+    # Связи
     messages_sent = relationship("Message", back_populates="sender")
     languages = relationship("Language", secondary=user_languages, back_populates="users")
 
-Language.users = relationship("User", secondary=user_languages, back_populates="languages")
-
-# --- Существующие модели с обновлением ---
 class Chat(Base):
     __tablename__ = "chats"
     id = Column(GUID(), primary_key=True, default=uuid.uuid4)

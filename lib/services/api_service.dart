@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:LangBridge/config/app_config.dart';
+import 'package:LangBridge/models/user_profile.dart';
 import 'package:LangBridge/repositories/auth_repository.dart';
 
 // const String _apiBaseUrl = "http://10.0.2.2/api";
@@ -26,16 +27,19 @@ class ApiService {
   }
 
   // --- Auth ---
-  Future<String?> loginAndGetToken(String username, String password) async {
+  Future<Map<String, String>?> loginAndGetData(String username, String password) async {
     final url = Uri.parse('$_apiBaseUrl/users/token');
-    // Для этого запроса не нужны auth headers
     final response = await http.post(url, body: {
       'username': username,
       'password': password,
     }, headers: {'Content-Type': 'application/x-www-form-urlencoded'});
 
     if (response.statusCode == 200) {
-      return jsonDecode(response.body)['access_token'];
+      final data = jsonDecode(response.body);
+      return {
+        'access_token': data['access_token'],
+        'user_id': data['user_id'],
+      };
     }
     return null;
   }
@@ -50,33 +54,79 @@ class ApiService {
     return response.statusCode == 201;
   }
 
-  // Метод logout() здесь больше не нужен, он будет вызываться напрямую из AuthRepository
-
   // --- Profile ---
-  Future<Map<String, dynamic>?> getMyProfile() async {
+  Future<UserProfile?> getMyProfile() async {
     final url = Uri.parse('$_apiBaseUrl/users/me');
     final headers = await _getAuthHeaders();
     if (!headers.containsKey('Authorization')) return null;
 
     final response = await http.get(url, headers: headers);
     if (response.statusCode == 200) {
-      return jsonDecode(utf8.decode(response.bodyBytes));
+      return UserProfile.fromJson(jsonDecode(utf8.decode(response.bodyBytes)));
     }
     return null;
   }
 
-  Future<Map<String, dynamic>?> updateUserProfile(Map<String, dynamic> data) async {
-    final url = Uri.parse('$_apiBaseUrl/users/me');
+  Future<UserProfile?> updateUserProfile(String userId, Map<String, dynamic> data) async {
+    final url = Uri.parse('$_apiBaseUrl/users/$userId');
     final headers = await _getAuthHeaders();
-    if (!headers.containsKey('Authorization')) return null;
+
+    // --- НАЧАЛО БЛОКА ДИАГНОСТИКИ ---
+    print('--- ОТЛАДКА ЗАПРОСА НА ОБНОВЛЕНИЕ ПРОФИЛЯ ---');
+    print('URL: $url');
+    print('Headers: $headers'); // <-- Самый важный print! Проверяем наличие 'Authorization'.
+    print('Body: ${jsonEncode(data)}');
+    print('-----------------------------------------');
+    // --- КОНЕЦ БЛОКА ДИАГНОСТИКИ ---
+
+    if (!headers.containsKey('Authorization')) {
+      print("КРИТИЧЕСКАЯ ОШИБКА: Заголовок 'Authorization' не был добавлен в headers.");
+      return null;
+    }
 
     final response = await http.put(
       url,
       headers: headers,
       body: jsonEncode(data),
     );
+
+    // --- ОТЛАДКА ОТВЕТА ---
+    print('Ответ сервера: ${response.statusCode}');
+    print('Тело ответа: ${response.body}');
+    // --------------------
+
     if (response.statusCode == 200) {
-      return jsonDecode(utf8.decode(response.bodyBytes));
+      return UserProfile.fromJson(jsonDecode(utf8.decode(response.bodyBytes)));
+    }
+    return null;
+  }
+
+  Future<UserProfile?> getUserProfile(String userId) async {
+    print('getting profile of user: $userId');
+    final url = Uri.parse('$_apiBaseUrl/users/$userId');
+    final headers = await _getAuthHeaders();
+
+    final response = await http.get(url, headers: headers);
+    if (response.statusCode == 200) {
+      return UserProfile.fromJson(jsonDecode(utf8.decode(response.bodyBytes)));
+    }
+    return null;
+  }
+
+  Future<List<UserProfile>?> findUsers({String? nativeLangCode, String? learningLangCode}) async {
+    final queryParams = {
+      if (nativeLangCode != null) 'native_lang_code': nativeLangCode,
+      if (learningLangCode != null) 'learning_lang_code': learningLangCode,
+    };
+    final url = Uri.parse('$_apiBaseUrl/users/').replace(queryParameters: queryParams);
+    final headers = await _getAuthHeaders();
+
+    final response = await http.get(url, headers: headers);
+    if (response.statusCode == 200) {
+      final List<dynamic> data = jsonDecode(utf8.decode(response.bodyBytes));
+      // ВАЖНО: UserProfileResponse от сервера немного отличается от UserProfile,
+      // поэтому используем UserProfile.fromJson. Если бы схемы были разные, нужна была бы другая модель.
+      return data.map((item) => UserProfile.fromJson(item)).toList();
     }
     return null;
   }
@@ -203,5 +253,18 @@ class ApiService {
       print('Error getting transcription: $e');
       return "[Ошибка сети]";
     }
+  }
+
+  Future<bool> updateUserLanguages(String userId, List<Map<String, dynamic>> languagesData) async {
+    final url = Uri.parse('$_apiBaseUrl/users/$userId/languages');
+    final headers = await _getAuthHeaders();
+    if (!headers.containsKey('Authorization')) return false;
+
+    final response = await http.put(
+      url,
+      headers: headers,
+      body: jsonEncode(languagesData),
+    );
+    return response.statusCode == 204; // 204 No Content
   }
 }

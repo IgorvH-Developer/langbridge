@@ -1,22 +1,33 @@
 from pydantic import BaseModel, Field
-from uuid import UUID as PyUUID # Используем PyUUID, чтобы не путать с полем модели
+from uuid import UUID as PyUUID
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 
 # --- Языки ---
-class LanguageBase(BaseModel):    name: str
-code: str
+class LanguageBase(BaseModel):
+    name: str
+    code: str
 
 class LanguageInDB(LanguageBase):
     id: int
     class Config:
-        orm_mode = True
+        from_attributes = True # <--- ИЗМЕНЕНИЕ
 
 class UserLanguageLink(BaseModel):
     id: int
     name: str
     code: str
     level: str
+    type: str
+
+    class Config:
+        from_attributes = True
+
+# Схема для обновления информации о языке пользователя
+class LanguageUpdate(BaseModel):
+    language_id: int
+    level: str
+    type: str
 
 # --- Пользователи ---
 class UserCreate(BaseModel):
@@ -25,45 +36,62 @@ class UserCreate(BaseModel):
 
 class UserUpdate(BaseModel):
     full_name: Optional[str] = None
+    gender: Optional[str] = None
     age: Optional[int] = None
+    country: Optional[str] = None
+    height: Optional[int] = None
     bio: Optional[str] = None
     avatar_url: Optional[str] = None
     interests: Optional[str] = None
 
-class UserResponse(BaseModel):
+class UserProfileResponse(BaseModel):
     id: PyUUID
     username: str
     full_name: Optional[str] = None
+    gender: Optional[str] = None
     age: Optional[int] = None
+    country: Optional[str] = None
+    height: Optional[int] = None
     bio: Optional[str] = None
     avatar_url: Optional[str] = None
     interests: Optional[str] = None
-    # languages: List[UserLanguageLink] # Это более сложная схема, пока оставим
+    languages: List[UserLanguageLink] = []
 
     class Config:
-        orm_mode = True
+        from_attributes = True
+
+# Упрощенная схема для списков пользователей
+class UserInListResponse(BaseModel):
+    id: PyUUID
+    username: str
+    avatar_url: Optional[str] = None
+    country: Optional[str] = None
+    languages: List[UserLanguageLink] = []
+
+    class Config:
+        from_attributes = True
 
 # --- Токены для аутентификации ---
 class Token(BaseModel):
     access_token: str
     token_type: str
+    user_id: PyUUID
 
 class TokenData(BaseModel):
     username: Optional[str] = None
 
-# Схема для создания чата (что клиент должен отправить)
+# Схема для создания чата
 class ChatCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=100, examples=["Обсуждение проекта X"])
-    # Можно добавить сюда user_ids для начальных участников, если нужно
 
-# Схема для ответа с информацией о чате (что сервер вернет)
+# Схема для ответа с информацией о чате
 class ChatResponse(BaseModel):
     id: PyUUID
     title: str
     timestamp: datetime
 
     class Config:
-        orm_mode = True # Позволяет создавать схему из объекта SQLAlchemy
+        from_attributes = True
 
 # Схема для ответа с информацией о сообщении
 class MessageResponse(BaseModel):
@@ -75,4 +103,4 @@ class MessageResponse(BaseModel):
     timestamp: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
