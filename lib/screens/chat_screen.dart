@@ -134,32 +134,6 @@ class _ChatScreenState extends State<ChatScreen> {
               },
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
-            child: Row(
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.videocam),
-                  onPressed: _sendVideo,
-                ),
-                Expanded(
-                  child: TextField(
-                    controller: _textController,
-                    decoration: const InputDecoration(
-                      hintText: "Введите сообщение...",
-                      border: OutlineInputBorder(),
-                    ),
-                    onChanged: _saveDraft,
-                    onSubmitted: (_) => _sendMessage(),
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.send),
-                  onPressed: _sendMessage,
-                ),
-              ],
-            ),
-          ),
           _buildMessageComposer(),
         ],
       ),
