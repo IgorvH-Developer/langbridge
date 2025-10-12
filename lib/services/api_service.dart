@@ -243,7 +243,21 @@ class ApiService {
     }
   }
 
-  // Новый метод для загрузки видео
+  Future<void> markChatAsRead(String chatId) async {
+    final url = Uri.parse('$_apiBaseUrl/chats/$chatId/read');
+    final headers = await _getAuthHeaders();
+    if (!headers.containsKey('Authorization')) return;
+
+    try {
+      final response = await http.post(url, headers: headers);
+      if (response.statusCode != 204) {
+        print('Failed to mark chat as read. Status: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error marking chat as read: $e');
+    }
+  }
+
   Future<Map<String, dynamic>?> uploadVideo({
     required String filePath,
     required String chatId,

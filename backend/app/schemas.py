@@ -89,6 +89,7 @@ class ChatResponse(BaseModel):
     timestamp: datetime
     participants: List[ParticipantResponse]
     last_message: Optional[LastMessageSchema] = None
+    unread_count: int = 0
     model_config = ConfigDict(from_attributes=True)
 
 class MessageResponse(BaseModel):

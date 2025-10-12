@@ -111,46 +111,83 @@ async def get_user_chats(
         current_user: models.User = Depends(get_current_user),
         db: Session = Depends(database.get_db)
 ):
+    """
+    Возвращает список чатов пользователя с подсчетом непрочитанных сообщений.
+    """
+    # 1. Получаем все чаты пользователя
     user_chats = db.query(models.Chat).join(
-        models.chat_participants
-    ).filter(
+        models.chat_participants,
         models.chat_participants.c.user_id == current_user.id
     ).options(
-        joinedload(models.Chat.participants).subqueryload(models.User.language_associations).joinedload(models.UserLanguageAssociation.language)
+        joinedload(models.Chat.participants)
     ).all()
 
-    chat_ids = [chat.id for chat in user_chats]
-    if not chat_ids:
+    if not user_chats:
         return []
 
-    # Оптимизированный запрос для получения всех последних сообщений одним махом
+    chat_ids = [chat.id for chat in user_chats]
+
+    # 2. Оптимизированный запрос для получения последних сообщений
     last_message_subquery = select(
         models.Message.chat_id,
-        func.max(models.Message.timestamp).label('max_timestamp')
-    ).where(
-        models.Message.chat_id.in_(chat_ids)
-    ).group_by(models.Message.chat_id).subquery()
+        func.max(models.Message.timestamp).label('max_ts')
+    ).where(models.Message.chat_id.in_(chat_ids)).group_by(models.Message.chat_id).subquery('last_msg_sq')
 
-    last_messages_query = select(models.Message).join(
+    last_messages_q = select(models.Message).join(
         last_message_subquery,
         and_(
             models.Message.chat_id == last_message_subquery.c.chat_id,
-            models.Message.timestamp == last_message_subquery.c.max_timestamp
+            models.Message.timestamp == last_message_subquery.c.max_ts
         )
     )
-    last_messages_result = db.execute(last_messages_query).scalars().all()
-    last_messages_map = {msg.chat_id: msg for msg in last_messages_result}
+    last_messages = db.execute(last_messages_q).scalars().all()
+    last_messages_map = {msg.chat_id: msg for msg in last_messages}
 
-    # Собираем ответ
+    # 3. Оптимизированный запрос для подсчета непрочитанных сообщений
+    unread_counts_q = select(
+        models.Message.chat_id,
+        func.count().label('unread_count')
+    ).where(
+        models.Message.chat_id.in_(chat_ids),
+        models.Message.is_read == False,
+        models.Message.sender_id != current_user.id # Считаем только чужие непрочитанные
+    ).group_by(models.Message.chat_id)
+
+    unread_counts_result = db.execute(unread_counts_q).all()
+    unread_counts_map = {chat_id: count for chat_id, count in unread_counts_result}
+
+    # 4. Собираем ответ
     response_chats = []
     for chat in user_chats:
-        chat.last_message = last_messages_map.get(chat.id)
-        response_chats.append(schemas.ChatResponse.model_validate(chat))
+        chat_data = schemas.ChatResponse.model_validate(chat)
+        chat_data.last_message = last_messages_map.get(chat.id)
+        chat_data.unread_count = unread_counts_map.get(chat.id, 0)
+        response_chats.append(chat_data)
 
-    # Сортировка на стороне Python
+    # 5. Сортировка
     response_chats.sort(
         key=lambda c: c.last_message.timestamp if c.last_message else c.timestamp,
         reverse=True
     )
-
     return response_chats
+
+@router.post("/{chat_id_str}/read", status_code=status.HTTP_204_NO_CONTENT)
+async def mark_chat_as_read(
+        chat_id_str: str,
+        current_user: models.User = Depends(get_current_user),
+        db: Session = Depends(database.get_db)
+):
+    """Помечает все сообщения в чате как прочитанные для текущего пользователя."""
+    try:
+        chat_uuid = PyUUID(chat_id_str)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid chat ID format")
+
+    # Обновляем все сообщения в чате, которые не от текущего пользователя
+    db.query(models.Message).filter(
+        models.Message.chat_id == chat_uuid,
+        models.Message.sender_id != current_user.id
+    ).update({"is_read": True}, synchronize_session=False)
+
+    db.commit()
+    logger.info(f"User {current_user.id} marked chat {chat_id_str} as read.")

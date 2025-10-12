@@ -41,6 +41,12 @@ class _ChatScreenState extends State<ChatScreen> {
     _textController.addListener(() {
       _saveDraft(_textController.text);
     });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (widget.chat.unreadCount > 0) {
+        widget.chatRepository.markChatAsRead(widget.chat.id);
+      }
+    });
   }
 
   Future<void> _loadDraft() async {

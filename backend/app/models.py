@@ -1,5 +1,6 @@
 import uuid
-from sqlalchemy import select, Column, String, Text, ForeignKey, TIMESTAMP, func, Integer, Table, types
+from sqlalchemy import select, Column, String, Text, ForeignKey, TIMESTAMP, func, Integer, Table, \
+    types, Boolean
 from sqlalchemy.orm import relationship, backref
 from sqlalchemy.ext.hybrid import hybrid_property
 from .database import Base
@@ -38,7 +39,9 @@ class GUID(types.TypeDecorator):
 # --- Chat Participants Table ---
 chat_participants = Table('chat_participants', Base.metadata,
                           Column('user_id', GUID, ForeignKey('users.id', ondelete="CASCADE"), primary_key=True),
-                          Column('chat_id', GUID, ForeignKey('chats.id', ondelete="CASCADE"), primary_key=True)
+                          Column('chat_id', GUID, ForeignKey('chats.id', ondelete="CASCADE"), primary_key=True),
+                          # Добавляем поле для отслеживания последнего прочтения
+                          Column('last_read_timestamp', TIMESTAMP, server_default=func.now())
                           )
 
 # --- ORM MODELS ---
@@ -107,5 +110,9 @@ class Message(Base):
     content = Column(Text)
     type = Column(String, default="text")
     timestamp = Column(TIMESTAMP, server_default=func.now())
+
+    # --- ДОБАВЛЯЕМ НОВОЕ ПОЛЕ ---
+    is_read = Column(Boolean, default=False, nullable=False)
+
     chat = relationship("Chat", back_populates="messages")
     sender = relationship("User", back_populates="messages_sent")

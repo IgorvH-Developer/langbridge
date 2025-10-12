@@ -17,14 +17,15 @@ class ChatParticipant {
   }
 }
 
+
 class Chat {
   final String id;
   final String? title;
   final DateTime? createdAt;
-  // --- ДОБАВЛЯЕМ ЭТО ПОЛЕ ---
   final Message? lastMessage;
   final List<Message>? initialMessages;
   final List<ChatParticipant> participants;
+  final int unreadCount;
 
   Chat({
     required this.id,
@@ -33,6 +34,7 @@ class Chat {
     this.lastMessage,
     this.initialMessages,
     required this.participants,
+    this.unreadCount = 0,
   });
 
   factory Chat.fromJson(Map<String, dynamic> json) {
@@ -44,14 +46,13 @@ class Chat {
           ? DateTime.parse(json['timestamp'] as String)
           : null,
       participants: participantList.map((p) => ChatParticipant.fromJson(p)).toList(),
-      // Парсим новое поле last_message
       lastMessage: json['last_message'] != null
           ? Message.fromLastMessageJson(json['last_message'])
           : null,
+      unreadCount: json['unread_count'] as int? ?? 0,
     );
   }
 
-  // copyWith может понадобиться для обновления состояния
   Chat copyWith({
     String? id,
     String? title,

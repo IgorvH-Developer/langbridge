@@ -97,16 +97,15 @@ class _ChatListScreenState extends State<ChatListScreen> {
           ? const Center(child: CircularProgressIndicator())
           : _chats.isEmpty
           ? const Center(child: Text("У вас пока нет чатов."))
-          : ListView.builder(
-        itemCount: _chats.length,
+          : ListView.builder(itemCount: _chats.length,
         itemBuilder: (context, index) {
           final chat = _chats[index];
           final draft = _drafts['draft_${chat.id}'];
-
-          // --- ЛОГИКА ОТОБРАЖЕНИЯ ---
           final displayData = _getDisplayData(chat, _currentUserId);
+          final bool hasUnread = chat.unreadCount > 0;
 
           return ListTile(
+            tileColor: hasUnread ? Colors.blue.withOpacity(0.05) : null,
             leading: CircleAvatar(
               radius: 28,
               backgroundImage: displayData.avatarUrl != null
@@ -116,14 +115,38 @@ class _ChatListScreenState extends State<ChatListScreen> {
                   ? Icon(displayData.isPrivateChat ? Icons.person : Icons.group)
                   : null,
             ),
-            title: Text(displayData.title,
-                style: const TextStyle(fontWeight: FontWeight.bold)),
+            title: Text(
+              displayData.title,
+              style: TextStyle(
+                fontWeight: hasUnread ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
             subtitle: _buildSubtitle(draft, chat.lastMessage),
-            trailing: Text(
-              chat.lastMessage != null
-                  ? DateFormat('HH:mm').format(chat.lastMessage!.timestamp)
-                  : '',
-              style: const TextStyle(color: Colors.grey, fontSize: 12),
+            trailing: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  chat.lastMessage != null
+                      ? DateFormat('HH:mm').format(chat.lastMessage!.timestamp)
+                      : '',
+                  style: const TextStyle(color: Colors.grey, fontSize: 12),
+                ),
+                if (hasUnread) ...[
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: const BoxDecoration(
+                      color: Colors.blue,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Text(
+                      chat.unreadCount.toString(),
+                      style: const TextStyle(color: Colors.white, fontSize: 10),
+                    ),
+                  ),
+                ]
+              ],
             ),
             onTap: () async {
               await Navigator.push(
@@ -214,7 +237,6 @@ class _ChatListScreenState extends State<ChatListScreen> {
   }
 }
 
-// --- КЛАСС-ОБЕРТКА ДЛЯ ДАННЫХ ОТОБРАЖЕНИЯ ---
 class _ChatDisplayData {
   final String title;
   final String? avatarUrl;

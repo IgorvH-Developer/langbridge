@@ -57,6 +57,28 @@ class ChatRepository {
     return null;
   }
 
+  Future<void> markChatAsRead(String chatId) async {
+    // Вызываем API
+    await _apiService.markChatAsRead(chatId);
+
+    // Оптимистичное обновление: находим чат в локальном списке и обнуляем счетчик
+    final currentChats = List<Chat>.from(_chatsNotifier.value);
+    final chatIndex = currentChats.indexWhere((c) => c.id == chatId);
+    if (chatIndex != -1) {
+      final oldChat = currentChats[chatIndex];
+      // Создаем новый экземпляр Chat с обнуленным счетчиком
+      currentChats[chatIndex] = Chat(
+        id: oldChat.id,
+        title: oldChat.title,
+        createdAt: oldChat.createdAt,
+        participants: oldChat.participants,
+        lastMessage: oldChat.lastMessage,
+        unreadCount: 0, // <-- Обнуляем
+      );
+      _chatsNotifier.value = currentChats; // Уведомляем UI
+    }
+  }
+
   // --- Методы для взаимодействия с ChatSocketService ---
   Future<void> connectToChat(Chat chat) async {
     // Теперь chat.id должен быть валидным UUID, полученным от API
