@@ -73,7 +73,7 @@ async def get_user_profile(user_id_str: str, db: Session = Depends(database.get_
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-# Валидируем базовый профиль
+    # Валидируем базовый профиль
     user_profile = schemas.UserProfileResponse.model_validate(user)
 
     # Правильно собираем языки через Association Object
@@ -177,7 +177,7 @@ async def find_users(
 
     users = query.distinct().limit(100).all()
 
-    return [schemas.UserInListResponse.model_validate(user) for user in users]
+    return users
 
 # --- Get all languages ---
 @router.get("/languages/all", response_model=List[schemas.LanguageInDB])

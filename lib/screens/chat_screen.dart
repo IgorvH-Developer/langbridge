@@ -37,7 +37,10 @@ class _ChatScreenState extends State<ChatScreen> {
   void initState() {
     super.initState();
     _loadCurrentUserAndConnect();
-    _loadDraft(); // <<< Загружаем черновик при открытии
+    _loadDraft();
+    _textController.addListener(() {
+      _saveDraft(_textController.text);
+    });
   }
 
   Future<void> _loadDraft() async {
@@ -60,8 +63,8 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   void dispose() {
-    // Сохраняем черновик перед закрытием экрана
     _saveDraft(_textController.text);
+    _textController.removeListener(() { _saveDraft(_textController.text); });
     widget.chatRepository.disconnectFromChat();
     _textController.dispose();
     super.dispose();
@@ -84,11 +87,12 @@ class _ChatScreenState extends State<ChatScreen> {
     if (_textController.text.trim().isEmpty) return;
 
     widget.chatRepository.sendChatMessage(
-      sender: _currentUserId, // Передаем ID текущего пользователя
+      sender: _currentUserId,
       content: _textController.text.trim(),
       type: MessageType.text,
     );
     _textController.clear();
+    _saveDraft('');
   }
 
   Future<void> _sendVideo() async {

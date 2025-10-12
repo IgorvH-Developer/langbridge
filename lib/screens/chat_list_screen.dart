@@ -1,9 +1,14 @@
-// lib/screens/chat_list_screen.dart
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
-import '../repositories/chat_repository.dart';
-import 'chat_screen.dart';
-import '../models/chat.dart'; // Импорт модели Chat
-import '../repositories/auth_repository.dart'; // <<< ДОБАВЛЕН ИМПОРТ
+import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'package:LangBridge/repositories/chat_repository.dart';
+import 'package:LangBridge/models/message.dart';
+import 'package:LangBridge/screens/chat_screen.dart';
+import 'package:LangBridge/models/chat.dart';
+import 'package:LangBridge/repositories/auth_repository.dart';
 
 class ChatListScreen extends StatefulWidget {
   const ChatListScreen({super.key});
@@ -13,91 +18,69 @@ class ChatListScreen extends StatefulWidget {
 }
 
 class _ChatListScreenState extends State<ChatListScreen> {
-  // Получаем ChatRepository. Можно через Provider или создать экземпляр.
-  // Для простоты примера создадим здесь, но лучше использовать DI/Provider.
   final ChatRepository _chatRepository = ChatRepository();
   bool _isLoading = true;
-  String? _currentUserId; // <<< ДОБАВЛЕНО ПОЛЕ ДЛЯ ID ПОЛЬЗОВАТЕЛЯ
+  String? _currentUserId;
+  // --- НОВОЕ ПОЛЕ: ХРАНИМ ЧАТЫ И ИХ ЧЕРНОВИКИ ---
+  Map<String, String> _drafts = {};
+  List<Chat> _chats = [];
 
   @override
   void initState() {
     super.initState();
-    _loadChats();
+    _loadData();
   }
 
-  // <<< МЕТОД ОБНОВЛЕН ДЛЯ ЗАГРУЗКИ ID ПОЛЬЗОВАТЕЛЯ
-  Future<void> _loadChats() async {
+  Future<void> _loadData() async {
     if (!mounted) return;
     setState(() => _isLoading = true);
 
-    // Одновременно запрашиваем ID пользователя и чаты для ускорения
-    final userIdFuture = AuthRepository.getCurrentUserId();
-    final fetchChatsFuture = _chatRepository.fetchChats();
-
-    // Дожидаемся обоих результатов
-    final userId = await userIdFuture;
-    await fetchChatsFuture;
+    final userId = await AuthRepository.getCurrentUserId();
+    await _chatRepository.fetchChats(); // Загружаем чаты из репозитория
+    final drafts = await _loadAllDrafts(); // Загружаем все черновики
 
     if (mounted) {
       setState(() {
         _currentUserId = userId;
+        // Слушаем изменения в репозитории
+        _chats = _chatRepository.chatsStream.value;
+        _drafts = drafts;
         _isLoading = false;
+      });
+      // Подписываемся на будущие обновления
+      _chatRepository.chatsStream.addListener(_updateChats);
+    }
+  }
+
+  // --- НОВЫЙ МЕТОД ДЛЯ ОБНОВЛЕНИЯ ЧАТОВ ---
+  void _updateChats() {
+    if(mounted) {
+      setState(() {
+        _chats = _chatRepository.chatsStream.value;
       });
     }
   }
 
-  void _showCreateChatDialog() {
-    final titleController = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text("Создать новый чат"),
-          content: TextField(
-            controller: titleController,
-            decoration: const InputDecoration(hintText: "Название чата"),
-            autofocus: true,
-          ),
-          actions: [
-            TextButton(
-              child: const Text("Отмена"),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-            TextButton(
-              child: const Text("Создать"),
-              onPressed: () async {
-                final title = titleController.text.trim();
-                if (title.isNotEmpty) {
-                  Navigator.of(context).pop(); // Закрыть диалог
-                  final newChat = await _chatRepository.createNewChat(title);
-                  if (newChat != null) {
-                    // Опционально: сразу перейти в новый чат
-                    // Navigator.push(
-                    //   context,
-                    //   MaterialPageRoute(
-                    //     builder: (_) => ChatScreen(
-                    //       chat: newChat,
-                    //       chatRepository: _chatRepository,
-                    //     ),
-                    //   ),
-                    // );
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text("Чат '${newChat.title}' создан!")),
-                    );
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("Не удалось создать чат.")),
-                    );
-                  }
-                }
-              },
-            ),
-          ],
-        );
-      },
-    );
+  // --- НОВЫЙ МЕТОД ДЛЯ ЗАГРУЗКИ ЧЕРНОВИКОВ ---
+  Future<Map<String, String>> _loadAllDrafts() async {
+    final prefs = await SharedPreferences.getInstance();
+    final keys = prefs.getKeys();
+    final drafts = <String, String>{};
+    for (String key in keys) {
+      if (key.startsWith('draft_')) {
+        drafts[key] = prefs.getString(key) ?? '';
+      }
+    }
+    return drafts;
   }
 
+  @override
+  void dispose() {
+    _chatRepository.chatsStream.removeListener(_updateChats);
+    super.dispose();
+  }
+
+  // --- ОСНОВНОЙ МЕТОД BUILD ---
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -106,67 +89,136 @@ class _ChatListScreenState extends State<ChatListScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _loadChats,
+            onPressed: _loadData,
           ),
         ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : ValueListenableBuilder<List<Chat>>(
-        valueListenable: _chatRepository.chatsStream,
-        builder: (context, chats, child) {
-          if (chats.isEmpty) {
-            return const Center(
-              child: Text("Нет доступных чатов. Создайте новый!"),
-            );
-          }
-          return ListView.builder(
-            itemCount: chats.length,
-            itemBuilder: (context, index) {
-              final chat = chats[index];
-              String displayTitle;
-              // Если у чата есть название, используем его.
-              if (chat.title != null && chat.title!.isNotEmpty) {
-                displayTitle = chat.title!;
-              } else {
-                // Иначе, это личный чат. Ищем собеседников.
-                final otherParticipants = chat.participants.where((p) => p.id != _currentUserId);
-                if (otherParticipants.isNotEmpty) {
-                  // Отображаем имена всех других участников через запятую.
-                  displayTitle = otherParticipants.map((p) => p.username).join(', ');
-                } else {
-                  // Запасной вариант, если в чате нет других участников.
-                  displayTitle = "Чат";
-                }
-              }
-              // <<< КОНЕЦ ИЗМЕНЕНИЙ
+          : _chats.isEmpty
+          ? const Center(child: Text("У вас пока нет чатов."))
+          : ListView.builder(
+        itemCount: _chats.length,
+        itemBuilder: (context, index) {
+          final chat = _chats[index];
+          final draft = _drafts['draft_${chat.id}'];
 
-              return ListTile(
-                title: Text(displayTitle), // ИСПРАВЛЕНО
-                subtitle: Text("ID: ${chat.id.substring(0,8)}..."), // Показываем часть ID
-                onTap: () {
-                  // Перед переходом в ChatScreen, убеждаемся, что chat.id есть
-                  // и передаем его для подключения к WebSocket
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => ChatScreen(
-                        chat: chat, // Передаем весь объект Chat
-                        chatRepository: _chatRepository,
-                      ),
-                    ),
-                  );
-                },
+          // --- ЛОГИКА ОТОБРАЖЕНИЯ ---
+          final displayData = _getDisplayData(chat, _currentUserId);
+
+          return ListTile(
+            leading: CircleAvatar(
+              radius: 28,
+              backgroundImage: displayData.avatarUrl != null
+                  ? NetworkImage(displayData.avatarUrl!)
+                  : null,
+              child: displayData.avatarUrl == null
+                  ? Icon(displayData.isPrivateChat ? Icons.person : Icons.group)
+                  : null,
+            ),
+            title: Text(displayData.title,
+                style: const TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: _buildSubtitle(draft, chat.lastMessage),
+            trailing: Text(
+              chat.lastMessage != null
+                  ? DateFormat('HH:mm').format(chat.lastMessage!.timestamp)
+                  : '',
+              style: const TextStyle(color: Colors.grey, fontSize: 12),
+            ),
+            onTap: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => ChatScreen(
+                    chat: chat,
+                    chatRepository: _chatRepository,
+                  ),
+                ),
               );
+              _loadData();
+              final updatedDrafts = await _loadAllDrafts();
+              if (mounted) setState(() => _drafts = updatedDrafts);
             },
           );
         },
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showCreateChatDialog,
-        tooltip: 'Создать чат',
-        child: const Icon(Icons.add),
-      ),
     );
   }
+
+  // --- ВСПОМОГАТЕЛЬНЫЙ ВИДЖЕТ ДЛЯ SUBTITLE ---
+  Widget _buildSubtitle(String? draft, Message? lastMessage) {
+    if (draft != null && draft.isNotEmpty) {
+      return Row(
+        children: [
+          const Text("[Черновик] ", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+          Expanded(
+            child: Text(
+              draft,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Colors.black),
+            ),
+          ),
+        ],
+      );
+    }
+
+    // 2. Если нет последнего сообщения
+    if (lastMessage == null) {
+      return const Text("Нет сообщений", style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey));
+    }
+
+    // 3. Определяем контент в зависимости от типа сообщения
+    String content;
+    switch (lastMessage.type) {
+      case MessageType.video:
+        content = "Видеосообщение";
+        break;
+      case MessageType.audio: // На будущее, если добавите аудио
+        content = "Голосовое сообщение";
+        break;
+      case MessageType.text:
+      default:
+        content = lastMessage.content;
+        break;
+    }
+
+    // 4. Возвращаем простой текст без префиксов
+    return Text(
+      content,
+      overflow: TextOverflow.ellipsis,
+      style: const TextStyle(color: Colors.grey), // Делаем текст серым для лучшего вида
+    );
+  }
+
+  // --- ВСПОМОГАТЕЛЬНЫЙ МЕТОД ДЛЯ ПОЛУЧЕНИЯ ДАННЫХ ЧАТА ---
+  _ChatDisplayData _getDisplayData(Chat chat, String? currentUserId) {
+    bool isPrivateChat = chat.title == null || chat.title!.isEmpty;
+    String title;
+    String? avatarUrl;
+
+    if (isPrivateChat) {
+      final otherParticipant = chat.participants.firstWhere(
+            (p) => p.id != currentUserId,
+        orElse: () => chat.participants.first, // На случай чата с самим собой
+      );
+      title = otherParticipant.username;
+      if (otherParticipant.avatarUrl != null && otherParticipant.avatarUrl!.isNotEmpty) {
+        avatarUrl = otherParticipant.avatarUrl!; // URL уже полный из модели UserProfile
+      }
+    } else {
+      title = chat.title!;
+      // Логика для аватара группы (пока нет)
+    }
+
+    return _ChatDisplayData(title: title, avatarUrl: avatarUrl, isPrivateChat: isPrivateChat);
+  }
+}
+
+// --- КЛАСС-ОБЕРТКА ДЛЯ ДАННЫХ ОТОБРАЖЕНИЯ ---
+class _ChatDisplayData {
+  final String title;
+  final String? avatarUrl;
+  final bool isPrivateChat;
+
+  _ChatDisplayData({required this.title, this.avatarUrl, required this.isPrivateChat});
 }

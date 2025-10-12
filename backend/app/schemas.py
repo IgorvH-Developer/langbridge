@@ -1,17 +1,17 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 from uuid import UUID as PyUUID
 from datetime import datetime
 from typing import Optional, List
+from . import models
 
-# --- Языки ---
+# --- Languages ---
 class LanguageBase(BaseModel):
     name: str
     code: str
 
 class LanguageInDB(LanguageBase):
     id: int
-    class Config:
-        from_attributes = True # <--- ИЗМЕНЕНИЕ
+    model_config = ConfigDict(from_attributes=True)
 
 class UserLanguageLink(BaseModel):
     id: int
@@ -19,17 +19,14 @@ class UserLanguageLink(BaseModel):
     code: str
     level: str
     type: str
+    model_config = ConfigDict(from_attributes=True)
 
-    class Config:
-        from_attributes = True
-
-# Схема для обновления информации о языке пользователя
 class LanguageUpdate(BaseModel):
     language_id: int
     level: str
     type: str
 
-# --- Пользователи ---
+# --- Users ---
 class UserCreate(BaseModel):
     username: str
     password: str
@@ -56,31 +53,18 @@ class UserProfileResponse(BaseModel):
     avatar_url: Optional[str] = None
     interests: Optional[str] = None
     languages: List[UserLanguageLink] = []
+    model_config = ConfigDict(from_attributes=True)
 
-    class Config:
-        from_attributes = True
-
-# Добавим простую схему для участника чата
 class ParticipantResponse(BaseModel):
     id: PyUUID
     username: str
     avatar_url: Optional[str] = None
+    model_config = ConfigDict(from_attributes=True)
 
-    class Config:
-        from_attributes = True
+class UserInListResponse(UserProfileResponse):
+    pass
 
-# Упрощенная схема для списков пользователей
-class UserInListResponse(BaseModel):
-    id: PyUUID
-    username: str
-    avatar_url: Optional[str] = None
-    country: Optional[str] = None
-    languages: List[UserLanguageLink] = []
-
-    class Config:
-        from_attributes = True
-
-# --- Токены для аутентификации ---
+# --- Tokens for authentication ---
 class Token(BaseModel):
     access_token: str
     token_type: str
@@ -89,21 +73,24 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     username: Optional[str] = None
 
-# Схема для создания чата
-class ChatCreate(BaseModel):
-    title: str = Field(..., min_length=1, max_length=100, examples=["Обсуждение проекта X"])
+# --- Chats ---
+class LastMessageSchema(BaseModel):
+    content: str
+    timestamp: datetime
+    type: str
+    model_config = ConfigDict(from_attributes=True)
 
-# Схема для ответа с информацией о чате
+class ChatCreate(BaseModel):
+    title: str = Field(..., min_length=1, max_length=100, examples=["Project X Discussion"])
+
 class ChatResponse(BaseModel):
     id: PyUUID
-    title: Optional[str] = None
+    title: Optional[str]
     timestamp: datetime
-    participants: List[ParticipantResponse] = []
+    participants: List[ParticipantResponse]
+    last_message: Optional[LastMessageSchema] = None
+    model_config = ConfigDict(from_attributes=True)
 
-    class Config:
-        from_attributes = True
-
-# Схема для ответа с информацией о сообщении
 class MessageResponse(BaseModel):
     id: PyUUID
     chat_id: PyUUID
@@ -111,6 +98,11 @@ class MessageResponse(BaseModel):
     content: str
     type: str
     timestamp: datetime
+    model_config = ConfigDict(from_attributes=True)
 
-    class Config:
-        from_attributes = True
+class ChatWithParticipantsResponse(BaseModel):
+    id: PyUUID
+    title: Optional[str]
+    timestamp: datetime
+    participants: List[ParticipantResponse]
+    model_config = ConfigDict(from_attributes=True)

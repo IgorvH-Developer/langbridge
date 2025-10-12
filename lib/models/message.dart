@@ -59,6 +59,19 @@ class Message {
     );
   }
 
+  factory Message.fromLastMessageJson(Map<String, dynamic> json) {
+    // Этот конструктор очень упрощен, так как нам нужны только content и timestamp
+    return Message(
+      id: '', // ID не важен для отображения в списке
+      sender: '', // Sender не важен
+      content: json['content'] ?? '',
+      type: MessageType.values.firstWhere(
+              (e) => e.toString().split('.').last == (json['type'] ?? 'text'),
+          orElse: () => MessageType.text),
+      timestamp: DateTime.parse(json['timestamp']),
+    );
+  }
+
   // Метод для обновления сообщения новой транскрипцией
   Message withTranscription(TranscriptionData newTranscription) {
     final Map<String, dynamic> contentData = jsonDecode(content);

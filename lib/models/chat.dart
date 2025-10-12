@@ -21,6 +21,8 @@ class Chat {
   final String id;
   final String? title;
   final DateTime? createdAt;
+  // --- ДОБАВЛЯЕМ ЭТО ПОЛЕ ---
+  final Message? lastMessage;
   final List<Message>? initialMessages;
   final List<ChatParticipant> participants;
 
@@ -28,6 +30,7 @@ class Chat {
     required this.id,
     this.title,
     this.createdAt,
+    this.lastMessage,
     this.initialMessages,
     required this.participants,
   });
@@ -40,9 +43,11 @@ class Chat {
       createdAt: json['timestamp'] != null
           ? DateTime.parse(json['timestamp'] as String)
           : null,
-      // initialMessages здесь не парсятся, предполагается, что они будут загружены позже
-      // или переданы при подключении к WebSocket
       participants: participantList.map((p) => ChatParticipant.fromJson(p)).toList(),
+      // Парсим новое поле last_message
+      lastMessage: json['last_message'] != null
+          ? Message.fromLastMessageJson(json['last_message'])
+          : null,
     );
   }
 
