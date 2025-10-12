@@ -34,7 +34,7 @@ class _VideoTranscriptionWidgetState extends State<VideoTranscriptionWidget> {
     super.initState();
     if (widget.message.videoUrl != null) {
       // Собираем полный URL, используя IP-адрес сервера из конфигурации.
-      final fullVideoUrl = "http://${AppConfig.serverAddr}${widget.message.videoUrl}";
+      final fullVideoUrl = "https://${AppConfig.serverAddr}${widget.message.videoUrl}";
 
       _controller = VideoPlayerController.networkUrl(Uri.parse(fullVideoUrl))
         ..initialize().then((_) {

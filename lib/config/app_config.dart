@@ -4,7 +4,9 @@ class AppConfig {
   // Приватный конструктор
   AppConfig._();
 
+  static String get serverSchema => dotenv.env['server_schema'] ?? 'http';
   static String get serverAddr => dotenv.env['server_addr'] ?? '';
+  static String get apiBaseUrl => '$serverSchema://$serverAddr';
 
   static Future<void> load(String flavor) async {
     String envFile;

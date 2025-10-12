@@ -151,20 +151,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     final profile = _profile!;
 
-    ImageProvider? avatarImage;
-    if (profile.avatarUrl != null && profile.avatarUrl!.isNotEmpty) {
-      final fullUrl = "http://${AppConfig.serverAddr}${profile.avatarUrl!}";
-      avatarImage = NetworkImage(fullUrl);
-    }
-
     return ListView(
       padding: const EdgeInsets.all(16.0),
       children: [
         Center(
           child: CircleAvatar(
             radius: 50,
-            backgroundImage: avatarImage,
-            child: avatarImage == null ? const Icon(Icons.person, size: 50) : null,
+            backgroundImage: profile.avatarUrl != null ? NetworkImage(profile.avatarUrl!) : null,
+            child: profile.avatarUrl == null ? const Icon(Icons.person, size: 50) : null,
           ),
         ),
         const SizedBox(height: 16),

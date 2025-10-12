@@ -211,7 +211,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     // Если нет, проверяем, есть ли URL с сервера
     else if (_avatarUrl != null && _avatarUrl!.isNotEmpty) {
       // Собираем полный URL для отображения
-      final fullUrl = _avatarUrl!.startsWith('http') ? _avatarUrl! : "http://${AppConfig.serverAddr}$_avatarUrl";
+      final fullUrl = _avatarUrl!.startsWith('http') ? _avatarUrl! : "https://${AppConfig.serverAddr}$_avatarUrl";
       image = NetworkImage(fullUrl);
     }
 

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:uuid/uuid.dart';
+import 'package:LangBridge/config/app_config.dart';
 import 'transcription_data.dart';
 
 enum MessageType { text, image, video, audio }
@@ -26,10 +27,14 @@ class Message {
     if (type == MessageType.video) {
       try {
         final data = jsonDecode(content);
-        videoUrl = data['video_url'];
-        // Парсим сложный объект транскрипции
-        if (data['transcription'] != null) {
-          transcription = TranscriptionData.fromJson(data['transcription']);
+        final rawVideoUrl = data['video_url'];
+        if (rawVideoUrl != null && rawVideoUrl.isNotEmpty) {
+          // --- ДОБАВЬТЕ ЭТУ ЛОГИКУ ---
+          if (rawVideoUrl.startsWith('http')) {
+            videoUrl = rawVideoUrl;
+          } else {
+            videoUrl = "${AppConfig.apiBaseUrl}$rawVideoUrl";
+          }
         }
       } catch (e) {
         print('Ошибка парсинга JSON: $e');

@@ -1,4 +1,5 @@
-// lib/models/user_profile.dart
+
+import 'package:LangBridge/config/app_config.dart';
 
 class UserLanguage {
   final int id;
@@ -58,6 +59,16 @@ class UserProfile {
     List<UserLanguage> parsedLanguages =
     langList.map((i) => UserLanguage.fromJson(i)).toList();
 
+    String? rawAvatarUrl = json['avatar_url'];
+    String? fullAvatarUrl;
+    if (rawAvatarUrl != null && rawAvatarUrl.isNotEmpty) {
+      if (rawAvatarUrl.startsWith('http')) {
+        fullAvatarUrl = rawAvatarUrl;
+      } else {
+        fullAvatarUrl = "${AppConfig.apiBaseUrl}$rawAvatarUrl";
+      }
+    }
+
     return UserProfile(
       id: json['id'],
       username: json['username'],
@@ -67,7 +78,7 @@ class UserProfile {
       country: json['country'],
       height: json['height'],
       bio: json['bio'],
-      avatarUrl: json['avatar_url'],
+      avatarUrl: fullAvatarUrl,
       interests: json['interests'],
       languages: parsedLanguages,
     );

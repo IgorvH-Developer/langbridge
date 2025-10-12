@@ -10,7 +10,7 @@ import 'package:LangBridge/models/transcription_data.dart';
 import 'package:LangBridge/repositories/auth_repository.dart';
 
 // const String _apiBaseUrl = "http://10.0.2.2/api";
-final String _apiBaseUrl = "http://${AppConfig.serverAddr}/api";
+final String _apiBaseUrl = "${AppConfig.apiBaseUrl}/api";
 
 class ApiService {
   // Теперь ApiService не зависит от AuthRepository, а только от хранилища
