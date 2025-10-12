@@ -1,16 +1,10 @@
 import uuid
-from sqlalchemy import Column, String, Text, ForeignKey, TIMESTAMP, func, Integer, Table, types
+from sqlalchemy import select, Column, String, Text, ForeignKey, TIMESTAMP, func, Integer, Table, types
 from sqlalchemy.orm import relationship, backref
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
-from .database import Base
-
-# --- Custom UUID Type for cross-dialect compatibility (the correct way) ---
+from .database import Base# --- Custom UUID Type (без изменений) ---
 class GUID(types.TypeDecorator):
-    """Platform-independent GUID type.
-
-    Uses PostgreSQL's UUID type, otherwise uses
-    CHAR(32) for other dialects.
-    """
+    """Platform-independent GUID type."""
     impl = types.CHAR
     cache_ok = True
 
@@ -39,56 +33,62 @@ class GUID(types.TypeDecorator):
                 value = uuid.UUID(value)
             return value
 
-# Промежуточная таблица для связи "многие ко многим" между пользователями и языками
-# Добавляем поле 'type' для разделения на 'native', 'learning'
-user_languages = Table('user_languages', Base.metadata,
-                       Column('user_id', GUID(), ForeignKey('users.id', ondelete="CASCADE"), primary_key=True),
-                       Column('language_id', Integer, ForeignKey('languages.id', ondelete="CASCADE"), primary_key=True),
-                       Column('level', String(50)), # e.g., 'A1', 'B2', 'Native'
-                       Column('type', String(20), default='learning', primary_key=True) # 'native' or 'learning'
-                       )
-# --- ПРОМЕЖУТОЧНАЯ ТАБЛИЦА ДЛЯ УЧАСТНИКОВ ЧАТА ---
+# --- Промежуточная таблица для участников чата (без изменений) ---
 chat_participants = Table('chat_participants', Base.metadata,
                           Column('user_id', GUID, ForeignKey('users.id', ondelete="CASCADE"), primary_key=True),
                           Column('chat_id', GUID, ForeignKey('chats.id', ondelete="CASCADE"), primary_key=True)
                           )
 
-# --- Таблица для хранения языков ---
+# --- МОДЕЛИ ORM ---
+
 class Language(Base):
     __tablename__ = "languages"
     id = Column(Integer, primary_key=True)
-    name = Column(String(100), unique=True, nullable=False) # e.g., "Русский", "English"
-    code = Column(String(10), unique=True, nullable=False) # e.g., "ru", "en"
-    users = relationship("User", secondary=user_languages, back_populates="languages")
+    name = Column(String(100), unique=True, nullable=False)
+    code = Column(String(10), unique=True, nullable=False)
+    # Связь 'users' удалена отсюда, чтобы избежать циклов. Управляется со стороны User.
 
-# --- МОДЕЛЬ ПОЛЬЗОВАТЕЛЯ ---
 class User(Base):
     __tablename__ = "users"
     id = Column(GUID(), primary_key=True, default=uuid.uuid4)
     username = Column(String(100), unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
 
-    # Новые поля профиля
+    # Поля профиля
     full_name = Column(String(150))
     gender = Column(String(50))
     age = Column(Integer)
     country = Column(String(100))
-    height = Column(Integer) # в сантиметрах
+    height = Column(Integer)
     bio = Column(Text)
     avatar_url = Column(String)
-    interests = Column(Text) # Можно хранить как строку с разделителями, например "спорт, музыка, кино"
+    interests = Column(Text)
 
-    # Связи
+    # Связь с промежуточной таблицей UserLanguageAssociation
+    language_associations = relationship("UserLanguageAssociation", cascade="all, delete-orphan", back_populates="user")
+
+    # Остальные связи
     messages_sent = relationship("Message", back_populates="sender")
-    languages = relationship("Language", secondary=user_languages, back_populates="users")
     chats = relationship("Chat", secondary=chat_participants, back_populates="participants")
+
+# --- КЛАСС ДЛЯ ПРОМЕЖУТОЧНОЙ ТАБЛИЦЫ (Association Object) ---
+# Это единственный источник определения для таблицы 'user_languages'
+class UserLanguageAssociation(Base):
+    __tablename__ = 'user_languages'
+    user_id = Column(GUID, ForeignKey('users.id'), primary_key=True)
+    language_id = Column(Integer, ForeignKey('languages.id'), primary_key=True)
+    level = Column(String(50))
+    type = Column(String(20), primary_key=True)
+
+    # Связи для этого объекта
+    user = relationship("User", back_populates="language_associations")
+    language = relationship("Language")
 
 class Chat(Base):
     __tablename__ = "chats"
     id = Column(GUID(), primary_key=True, default=uuid.uuid4)
     title = Column(String, nullable=True)
     timestamp = Column(TIMESTAMP, server_default=func.now())
-
     messages = relationship("Message", back_populates="chat", cascade="all, delete-orphan")
     participants = relationship("User", secondary=chat_participants, back_populates="chats")
 
@@ -100,7 +100,5 @@ class Message(Base):
     content = Column(Text)
     type = Column(String, default="text")
     timestamp = Column(TIMESTAMP, server_default=func.now())
-
-    # Связи (одно сообщение -> один чат, одно сообщение -> один отправитель)
     chat = relationship("Chat", back_populates="messages")
     sender = relationship("User", back_populates="messages_sent")

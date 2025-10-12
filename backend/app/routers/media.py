@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 import json
 import stable_whisper # ИМПОРТИРУЕМ новую библиотеку
 
+from .users import get_current_user
 from .. import database, models, schemas
 from ..websocket_manager import ConnectionManager
 from ..logger import logger
@@ -64,13 +65,12 @@ async def upload_video(
     db.commit()
     db.refresh(db_message)
 
-    # --- ИСПРАВЛЕНИЕ ЗДЕСЬ ---
     # Для WebSocket мы отправляем словарь, где `content` - это тоже словарь (не строка!)
     message_to_broadcast = {
         "id": str(db_message.id),
         "chat_id": str(db_message.chat_id),
         "sender_id": str(db_message.sender_id),
-        "content": message_content_dict,  # <<< ИСПОЛЬЗУЕМ СЛОВАРЬ, А НЕ СТРОКУ
+        "content": message_content_dict,
         "type": db_message.type,
         "timestamp": db_message.timestamp.isoformat()
     }
@@ -147,7 +147,6 @@ async def transcribe_video_message(
     return transcription_result
 
 
-# НОВЫЙ ЭНДПОИНТ для обновления транскрипции
 @router.put("/transcribe/{message_id_str}")
 async def update_video_transcription(
         message_id_str: str,
@@ -176,4 +175,45 @@ async def update_video_transcription(
     # (пропущено для краткости)
 
     return {"status": "success", "message_id": message_id_str}
+
+
+@router.post("/upload/avatar/{user_id_str}")
+async def upload_avatar(
+        user_id_str: str,
+        file: UploadFile = File(...),
+        current_user: models.User = Depends(get_current_user),
+        db: Session = Depends(database.get_db)
+):
+    """
+    Загружает аватар для пользователя. Пользователь может загружать аватар только для себя.
+    """
+    if str(current_user.id) != user_id_str:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not allowed to upload an avatar for another user"
+        )
+
+    # Проверяем, что это изображение
+    if not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Invalid file type. Only images are allowed.")
+
+    file_extension = file.filename.split('.')[-1] if '.' in file.filename else 'jpg'
+    avatar_filename = f"avatar_{current_user.id}_{uuid.uuid4()}.{file_extension}"
+    avatar_path = os.path.join(UPLOAD_DIR, avatar_filename)
+
+    # Сохраняем файл
+    with open(avatar_path, "wb") as buffer:
+        buffer.write(await file.read())
+    logger.info(f"Avatar for user {current_user.username} saved to {avatar_path}")
+
+    # Формируем URL, который будет доступен через Nginx
+    avatar_url = f"/uploads/{avatar_filename}"
+
+    # Обновляем профиль пользователя в БД
+    current_user.avatar_url = avatar_url
+    db.add(current_user)
+    db.commit()
+    # db.refresh(current_user) # refresh не обязателен, т.к. мы возвращаем только URL
+
+    return {"avatar_url": avatar_url}
 

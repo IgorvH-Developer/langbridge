@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:LangBridge/config/app_config.dart';
+import 'package:LangBridge/models/language.dart';
 import 'package:LangBridge/models/user_profile.dart';
 import 'package:LangBridge/models/transcription_data.dart';
 import 'package:LangBridge/repositories/auth_repository.dart';
@@ -127,6 +128,58 @@ class ApiService {
       // ВАЖНО: UserProfileResponse от сервера немного отличается от UserProfile,
       // поэтому используем UserProfile.fromJson. Если бы схемы были разные, нужна была бы другая модель.
       return data.map((item) => UserProfile.fromJson(item)).toList();
+    }
+    return null;
+  }
+
+  Future<String?> uploadAvatar(String userId, String filePath) async {
+    final url = Uri.parse('$_apiBaseUrl/media/upload/avatar/$userId');
+    final request = http.MultipartRequest('POST', url);
+
+    final headers = await _getAuthHeaders();
+    // Удаляем Content-Type, так как для multipart/form-data он будет установлен автоматически с границей
+    headers.remove('Content-Type');
+    request.headers.addAll(headers);
+
+    request.files.add(
+      await http.MultipartFile.fromPath(
+        'file', // Имя поля, ожидаемое на бэкенде
+        filePath,
+        contentType: MediaType('image', 'jpeg'), // Тип контента
+      ),
+    );
+
+    try {
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['avatar_url']; // Возвращаем относительный URL, например /uploads/avatar.jpg
+      } else {
+        print('Avatar upload failed: ${response.statusCode}, Body: ${response.body}');
+        return null;
+      }
+    } catch (e) {
+      print('Error uploading avatar: $e');
+      return null;
+    }
+  }
+
+  /// Получает список всех языков, доступных в системе.
+  Future<List<Language>?> getAllLanguages() async {
+    // Этот эндпоинт уже существует на бэкенде, мы просто вызываем его
+    final url = Uri.parse('$_apiBaseUrl/users/languages/all');
+    final headers = await _getAuthHeaders();
+
+    try {
+      final response = await http.get(url, headers: headers);
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(utf8.decode(response.bodyBytes));
+        return data.map((item) => Language.fromJson(item)).toList();
+      }
+    } catch (e) {
+      print('Error fetching all languages: $e');
     }
     return null;
   }
