@@ -6,6 +6,7 @@ import os
 from app.database import Base, get_db, engine, SessionLocal
 from app.main import app
 
+os.environ['TESTING'] = '1'
 
 def override_get_db():
     """Подменяет зависимость get_db для использования тестовой БД."""

@@ -4,6 +4,7 @@ import 'package:LangBridge/screens/chat_screen.dart';
 import 'package:LangBridge/services/api_service.dart';
 import 'package:LangBridge/repositories/auth_repository.dart';
 import 'package:LangBridge/repositories/chat_repository.dart';
+import 'package:LangBridge/config/app_config.dart';
 import 'edit_profile_screen.dart';
 import 'login_screen.dart';
 
@@ -149,14 +150,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
 
     final profile = _profile!;
+
+    ImageProvider? avatarImage;
+    if (profile.avatarUrl != null && profile.avatarUrl!.isNotEmpty) {
+      final fullUrl = "http://${AppConfig.serverAddr}${profile.avatarUrl!}";
+      avatarImage = NetworkImage(fullUrl);
+    }
+
     return ListView(
       padding: const EdgeInsets.all(16.0),
       children: [
         Center(
           child: CircleAvatar(
             radius: 50,
-            backgroundImage: profile.avatarUrl != null ? NetworkImage(profile.avatarUrl!) : null,
-            child: profile.avatarUrl == null ? const Icon(Icons.person, size: 50) : null,
+            backgroundImage: avatarImage,
+            child: avatarImage == null ? const Icon(Icons.person, size: 50) : null,
           ),
         ),
         const SizedBox(height: 16),
