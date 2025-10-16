@@ -13,7 +13,6 @@ import 'package:LangBridge/repositories/auth_repository.dart';
 final String _apiBaseUrl = "${AppConfig.apiBaseUrl}/api";
 
 class ApiService {
-  // Теперь ApiService не зависит от AuthRepository, а только от хранилища
   final _storage = const FlutterSecureStorage();
 
   Future<Map<String, String>> _getAuthHeaders() async {
@@ -295,6 +294,43 @@ class ApiService {
       }
     } catch (e) {
       print('Error uploading video: $e');
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> uploadAudio({
+    required String filePath,
+    required String chatId,
+    required String senderId,
+  }) async {
+    final url = Uri.parse('$_apiBaseUrl/media/upload/audio')
+        .replace(queryParameters: {
+      'chat_id': chatId,
+      'sender_id': senderId,
+    });
+
+    final request = http.MultipartRequest('POST', url);
+    final headers = await _getAuthHeaders();
+    request.headers.addAll(headers);
+
+    request.files.add(await http.MultipartFile.fromPath(
+      'file',
+      filePath,
+      contentType: MediaType('audio', 'm4a'), // Тип для аудио
+    ));
+
+    try {
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200) {
+        return jsonDecode(utf8.decode(response.bodyBytes));
+      } else {
+        print('Audio upload failed: ${response.statusCode}, Body: ${response.body}');
+        return null;
+      }
+    } catch (e) {
+      print('Error uploading audio: $e');
       return null;
     }
   }

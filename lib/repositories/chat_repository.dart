@@ -128,6 +128,17 @@ class ChatRepository {
     );
   }
 
+  Future<void> sendAudioMessage({
+    required String filePath,
+    required String chatId,required String senderId,
+  }) async {
+    await _apiService.uploadAudio(
+      filePath: filePath,
+      chatId: chatId,
+      senderId: senderId,
+    );
+  }
+
   Future<TranscriptionData?> transcribeMessage(String messageId) async {
     return await _apiService.getTranscriptionForMessage(messageId);
   }

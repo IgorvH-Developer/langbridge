@@ -78,42 +78,112 @@ async def upload_video(
 
     return {"filename": video_filename, "url": video_url, "message_id": str(db_message.id)}
 
+@router.post("/upload/audio")
+async def upload_audio(
+        chat_id: str,
+        sender_id: str,
+        file: UploadFile = File(...),
+        db: Session = Depends(database.get_db)
+):
+    logger.info(f"Uploading audio: {chat_id}, {sender_id}, {file.filename}")
+    try:
+        chat_uuid = uuid.UUID(chat_id)
+        sender_uuid = uuid.UUID(sender_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid UUID format")
+
+    chat_db = db.query(models.Chat).filter(models.Chat.id == chat_uuid).first()
+    user_db = db.query(models.User).filter(models.User.id == sender_uuid).first()
+    if not chat_db or not user_db:
+        raise HTTPException(status_code=404, detail="Chat or User not found")
+
+    file_extension = file.filename.split('.')[-1] if '.' in file.filename else 'm4a'
+    audio_filename = f"{uuid.uuid4()}.{file_extension}"
+    audio_path = os.path.join(UPLOAD_DIR, audio_filename)
+
+    file_content = await file.read()
+    with open(audio_path, "wb") as buffer:
+        buffer.write(file_content)
+    logger.info(f"Audio saved to {audio_path}")
+
+    duration_ms = 0
+    try:
+        audio_segment = AudioSegment.from_file(audio_path)
+        duration_ms = len(audio_segment)
+        logger.info(f"Audio duration: {duration_ms} ms")
+    except Exception as e:
+        logger.error(f"Could not get audio duration for {audio_path}: {e}")
+
+    audio_url = f"/uploads/{audio_filename}"
+
+    message_content_dict = {
+        "audio_url": audio_url,
+        "transcription": None,
+        "duration_ms": duration_ms
+    }
+
+    db_message = models.Message(
+        chat_id=chat_uuid,
+        sender_id=sender_uuid,
+        content=json.dumps(message_content_dict),
+        type="audio"
+    )
+    db.add(db_message)
+    db.commit()
+    db.refresh(db_message)
+
+    message_to_broadcast = {
+        "id": str(db_message.id),
+        "chat_id": str(db_message.chat_id),
+        "sender_id": str(db_message.sender_id),
+        "content": message_content_dict,
+        "type": db_message.type,
+        "timestamp": db_message.timestamp.isoformat()
+    }
+    await manager.broadcast(chat_id, message_to_broadcast)
+
+    return {"filename": audio_filename, "url": audio_url, "message_id": str(db_message.id)}
+
+
+# --- ДЕЛАЕМ ЭНДПОИНТ ТРАНСКРИПЦИИ УНИВЕРСАЛЬНЫМ ---
 @router.post("/transcribe/{message_id_str}")
-async def transcribe_video_message(
+async def transcribe_media_message(  # Переименовываем функцию
         message_id_str: str,
         db: Session = Depends(database.get_db)
 ):
-    logger.info(f"Transcribing video: {message_id_str}")
+    logger.info(f"Transcribing media message: {message_id_str}")
     try:
         message_uuid = uuid.UUID(message_id_str)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid message_id format")
 
     db_message = db.query(models.Message).filter(models.Message.id == message_uuid).first()
-    if not db_message or db_message.type != "video":
-        raise HTTPException(status_code=404, detail="Video message not found")
+
+    if not db_message or db_message.type not in ["video", "audio"]:
+        raise HTTPException(status_code=404, detail="Media message not found")
 
     content_data = json.loads(db_message.content)
     if content_data.get("transcription"):
         logger.info(f"Returning existing transcription for message {message_id_str}")
-        return content_data["transcription"] # Возвращаем уже сохраненный объект
+        return content_data["transcription"]
 
-    video_url = content_data.get("video_url")
-    if not video_url:
-        raise HTTPException(status_code=404, detail="Video URL not found in message content")
+    media_url_relative = content_data.get("video_url") or content_data.get("audio_url")
+    if not media_url_relative:
+        raise HTTPException(status_code=404, detail="Media URL not found in message content")
 
-    logger.info(f"looking for video with url: {video_url}")
-    if not os.path.exists(video_url):
-        raise HTTPException(status_code=404, detail="Video file not found on server")
+    # Преобразуем в абсолютный путь внутри контейнера
+    media_path_absolute = os.path.join(UPLOAD_DIR, os.path.basename(media_url_relative))
+    logger.info(f"looking for media file at: {media_path_absolute}")
 
-    logger.info(f"Starting transcription for {video_url}")
+    if not os.path.exists(media_path_absolute):
+        raise HTTPException(status_code=404, detail="Media file not found on server")
+
+    logger.info(f"Starting transcription for {media_path_absolute}")
     transcription_result = None
     try:
-        # stable-ts может работать напрямую с видео/аудио файлами
-        model = stable_whisper.load_model('base') # или 'tiny', 'small', 'medium'
-        result = model.transcribe(video_url, language="ru") # Указываем язык
+        model = stable_whisper.load_model('base')
+        result = model.transcribe(media_path_absolute, language="ru")
 
-        # Преобразуем результат в нужную нам структуру
         words_data = []
         for segment in result.segments:
             for word in segment.words:
@@ -121,36 +191,30 @@ async def transcribe_video_message(
                     "word": word.word,
                     "start": word.start,
                     "end": word.end,
-                    "id": str(uuid.uuid4()) # Уникальный ID для каждого слова, чтобы его можно было редактировать
+                    "id": str(uuid.uuid4())
                 })
-
         transcription_result = {
             "full_text": result.text,
             "words": words_data
         }
 
         logger.info(f"Successfully transcribed. First few words: {words_data[:5]}")
-
-        # Обновляем JSON в БД с новой структурой
         content_data["transcription"] = transcription_result
         db_message.content = json.dumps(content_data)
         db.commit()
 
     except Exception as e:
-        logger.error(f"Could not transcribe video {video_url}: {e}", exc_info=True)
-        # В случае ошибки вернем пустую структуру
-        transcription_result = {
-            "full_text": "[Не удалось распознать речь]",
-            "words": []
-        }
+        # ... (обработка ошибок)
+        logger.error(f"Could not transcribe media {media_path_absolute}: {e}", exc_info=True)
+        transcription_result = {"full_text": "[Не удалось распознать речь]", "words": []}
 
     return transcription_result
 
-
+# Аналогично делаем универсальным эндпоинт обновления
 @router.put("/transcribe/{message_id_str}")
-async def update_video_transcription(
+async def update_media_transcription( # Переименовываем
         message_id_str: str,
-        transcription_data: dict, # Pydantic схема была бы лучше, но для простоты dict
+        transcription_data: dict,
         db: Session = Depends(database.get_db)
 ):
     logger.info(f"Updating transcription for message: {message_id_str}")
@@ -160,20 +224,13 @@ async def update_video_transcription(
         raise HTTPException(status_code=400, detail="Invalid message_id format")
 
     db_message = db.query(models.Message).filter(models.Message.id == message_uuid).first()
-    if not db_message or db_message.type != "video":
-        raise HTTPException(status_code=404, detail="Video message not found")
+    if not db_message or db_message.type not in ["video", "audio"]:
+        raise HTTPException(status_code=404, detail="Media message not found")
 
     content_data = json.loads(db_message.content)
-    # Просто заменяем объект транскрипции на новый, присланный с клиента
     content_data["transcription"] = transcription_data
     db_message.content = json.dumps(content_data)
     db.commit()
-    logger.info(f"Successfully updated transcription for message {message_id_str}")
-
-    # Здесь можно также отправить WebSocket уведомление всем участникам чата
-    # о том, что транскрипция обновилась, чтобы у них тоже все поменялось.
-    # (пропущено для краткости)
-
     return {"status": "success", "message_id": message_id_str}
 
 

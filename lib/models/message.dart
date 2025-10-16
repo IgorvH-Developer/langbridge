@@ -1,5 +1,4 @@
 import 'dart:convert';
-
 import 'package:uuid/uuid.dart';
 import 'package:LangBridge/config/app_config.dart';
 import 'transcription_data.dart';
@@ -12,10 +11,10 @@ class Message {
   final String content;
   final MessageType type;
   final DateTime timestamp;
-
   String? videoUrl;
-  // ЗАМЕНЯЕМ String? transcription на TranscriptionData? transcription
+  String? audioUrl;
   TranscriptionData? transcription;
+  Duration? duration;
 
   Message({
     required this.id,
@@ -23,22 +22,36 @@ class Message {
     required this.content,
     required this.type,
     required this.timestamp,
+    this.duration,
   }) {
-    if (type == MessageType.video) {
+    if (type == MessageType.video || type == MessageType.audio) {
       try {
         final data = jsonDecode(content);
-        final rawVideoUrl = data['video_url'];
-        if (rawVideoUrl != null && rawVideoUrl.isNotEmpty) {
-          // --- ДОБАВЬТЕ ЭТУ ЛОГИКУ ---
-          if (rawVideoUrl.startsWith('http')) {
-            videoUrl = rawVideoUrl;
+
+        // --- ОБНОВЛЕННАЯ ЛОГИКА ---
+        final rawUrl = data['video_url'] ?? data['audio_url'];
+        if (rawUrl != null && rawUrl.isNotEmpty) {
+          final fullUrl = rawUrl.startsWith('http')
+              ? rawUrl
+              : "${AppConfig.apiBaseUrl}$rawUrl";
+
+          if (type == MessageType.video) {
+            videoUrl = fullUrl;
           } else {
-            videoUrl = "${AppConfig.apiBaseUrl}$rawVideoUrl";
+            audioUrl = fullUrl;
           }
         }
+        if (data['transcription'] != null) {
+          transcription = TranscriptionData.fromJson(data['transcription']);
+        }
+        // Парсим длительность
+        if (data['duration_ms'] != null) {
+          duration = Duration(milliseconds: data['duration_ms']);
+        }
+        // --- КОНЕЦ ОБНОВЛЕННОЙ ЛОГИКИ ---
+
       } catch (e) {
-        print('Ошибка парсинга JSON: $e');
-        // Ошибка парсинга
+        print('Ошибка парсинга JSON для медиа-сообщения: $e');
       }
     }
   }
@@ -48,14 +61,44 @@ class Message {
             (e) => e.toString().split('.').last == (json['type'] ?? 'text'),
         orElse: () => MessageType.text);
 
+    dynamic contentJson;
+    String contentString;
+
+    // This is the core of the fix. We treat content differently based on message type.
+    if (type == MessageType.text) {
+      contentString = json['content'] as String;
+      contentJson = contentString; // for duration check, it will be a string, so it's safe.
+    } else { // For media messages
+      if (json['content'] is String) {
+        contentString = json['content'];
+        try {
+          contentJson = jsonDecode(contentString);
+        } catch (e) {
+          print("Error decoding media content: $e. Content: $contentString");
+          contentJson = {}; // avoid crash on duration check
+        }
+      } else {
+        contentJson = json['content'];
+        contentString = jsonEncode(contentJson);
+      }
+    }
+    
+    Duration? messageDuration;
+    // Only check for duration if we have a map
+    if (contentJson is Map && contentJson['duration_ms'] != null) {
+      messageDuration = Duration(milliseconds: contentJson['duration_ms']);
+    }
+
     return Message(
       id: json['id'] ?? const Uuid().v4(),
       sender: json['sender_id'] ?? json['sender'] ?? 'unknown_sender',
-      content: json['content'] is String ? json['content'] : jsonEncode(json['content']), // Контент может приходить как JSON
+      content: contentString, // Pass the original or encoded string
       type: type,
       timestamp: json['timestamp'] != null
           ? DateTime.parse(json['timestamp'])
           : DateTime.now(),
+      // Pass duration if we found it. Constructor might also find it, which is a bit redundant but not harmful.
+      duration: messageDuration,
     );
   }
 
@@ -83,6 +126,7 @@ class Message {
       content: jsonEncode(contentData),
       type: type,
       timestamp: timestamp,
+      duration: duration, // <--- НЕ ЗАБЫВАЕМ ПЕРЕДАВАТЬ ДЛИТЕЛЬНОСТЬ ПРИ КОПИРОВАНИИ
     );
   }
 }

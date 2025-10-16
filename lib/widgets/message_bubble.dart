@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:LangBridge/models/message.dart';
 import 'package:LangBridge/repositories/chat_repository.dart';
-import 'video_transcription_widget.dart';
+import 'media_transcription_widget.dart';
 
 class MessageBubble extends StatelessWidget {
   final Message message;
@@ -44,9 +44,8 @@ class MessageBubble extends StatelessWidget {
               ),
             if (message.type == MessageType.text)
               Text(message.content)
-            else if (message.type == MessageType.video)
-            // ИСПОЛЬЗУЕМ НОВЫЙ ВИДЖЕТ
-              VideoTranscriptionWidget(
+            else if (message.type == MessageType.video || message.type == MessageType.audio)
+              MediaTranscriptionWidget(
                 message: message,
                 chatRepository: chatRepository,
                 isUser: isUser,
