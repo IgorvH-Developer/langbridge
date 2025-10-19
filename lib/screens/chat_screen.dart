@@ -1,20 +1,21 @@
 import 'dart:io';
 import 'dart:async';
-import 'package:LangBridge/screens/video_message_screen.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter_sound/public/flutter_sound_recorder.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter_sound/flutter_sound.dart';
-import 'package:record/record.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:record/record.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-import '../models/chat.dart';
-import '../models/message.dart';
-import '../repositories/auth_repository.dart';
-import '../repositories/chat_repository.dart';
-import '../widgets/message_bubble.dart';
+import 'package:LangBridge/models/chat.dart';
+import 'package:LangBridge/models/message.dart';
+import 'package:LangBridge/repositories/auth_repository.dart';
+import 'package:LangBridge/repositories/chat_repository.dart';
+import 'package:LangBridge/widgets/message_bubble.dart';
+import 'package:LangBridge/services/webrtc_manager.dart';
+import 'package:LangBridge/screens/call_screen.dart';
 
 enum MediaRecordMode { audio, video }
 
@@ -37,9 +38,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final ImagePicker _picker = ImagePicker();
   final AudioRecorder _soundRecorder = AudioRecorder();
   // final FlutterSoundRecorder _soundRecorder = FlutterSoundRecorder();
-
   String _currentUserId = '';
-
   MediaRecordMode _mediaRecordMode = MediaRecordMode.audio;
   bool _isRecording = false;
   bool _isRecordingLocked = false;
@@ -47,18 +46,21 @@ class _ChatScreenState extends State<ChatScreen> {
   int _recordingDurationSeconds = 0;
   bool _isActionCancelled = false;
   String? _recordingPath;
-
-  bool _isPaused = false; // Состояние паузы
-  double _dragOffset = 0.0; // Смещение пальца по вертикали
-  bool _showCancelUI = false; // Показать UI "свайп для отмены"
+  bool _isPaused = false;
+  double _dragOffset = 0.0;
+  bool _showCancelUI = false;
+  late WebRTCManager _webRTCManager;
+  String _peerName = '';
 
   @override
   void initState() {
     super.initState();
-    _initSoundRecorder();
-    _loadCurrentUserAndConnect();
-    _loadDraft();
-    _textController.addListener(() => mounted ? setState(() {}) : null);
+    _initScreen();
+  }
+
+  void _onSignalingMessage() {
+    final message = widget.chatRepository.chatSocketService.signalingMessageNotifier.value;
+    _handleSignalingMessage(message);
   }
 
   Future<void> _initSoundRecorder() async {
@@ -69,18 +71,142 @@ class _ChatScreenState extends State<ChatScreen> {
     // await _soundRecorder.openRecorder();
   }
 
+  Future<void> _initScreen() async {
+    await _loadCurrentUserAndConnect();
+
+    if ((widget.chat.title == null || widget.chat.title!.isEmpty) && _currentUserId.isNotEmpty) {
+      final otherParticipant = widget.chat.participants.firstWhere((p) => p.id != _currentUserId, orElse: () => widget.chat.participants.first);
+      _peerName = otherParticipant.username;
+    } else {
+      _peerName = widget.chat.title ?? "Чат";
+    }
+
+    // Создаем WebRTCManager
+    _webRTCManager = WebRTCManager(
+      socketService: widget.chatRepository.chatSocketService,
+      selfId: _currentUserId,
+      chatId: widget.chat.id,
+    );
+
+    // Подписываемся на сигнальные сообщения
+    widget.chatRepository.chatSocketService.signalingMessageNotifier.addListener(_onSignalingMessage);
+
+    // Загружаем черновик и добавляем слушатель
+    _loadDraft();
+    _textController.addListener(() => mounted ? setState(() {}) : null);
+
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
+    print('[ChatScreen][${TimeOfDay.now()}] dispose: отписываемся от сигналов и очищаем ресурсы.');
+    widget.chatRepository.chatSocketService.signalingMessageNotifier.removeListener(_onSignalingMessage);
+    _webRTCManager.dispose();
     _soundRecorder.dispose();
     _saveDraft(_textController.text);
     widget.chatRepository.disconnectFromChat();
     _textController.dispose();
-    _recordingTimer?.cancel();
     super.dispose();
   }
 
+  void _handleSignalingMessage(Map<String, dynamic>? data) async {
+    if (!mounted || data == null) return;
+
+    final type = data['type'];
+    print('[ChatScreen][${TimeOfDay.now()}] Получено сигнальное сообщение: type=$type');
+
+    switch (type) {
+      case 'call_offer':
+        await _webRTCManager.initializeConnection();
+        if (mounted) _showIncomingCallDialog(data);
+        break;
+      case 'call_answer':
+        await _webRTCManager.handleAnswer(data['sdp']);
+        break;
+      case 'ice_candidate':
+        await _webRTCManager.handleCandidate(data['candidate']);
+        break;
+      case 'call_end':
+        _webRTCManager.handleCallEnd();
+        break;
+    }
+  }
+
+  void _startCall(bool isVideo) async {
+    print('[ChatScreen][${TimeOfDay.now()}] -> _startCall: Начинаем ${isVideo ? "видео" : "аудио"}звонок...');
+    var cameraStatus = await Permission.camera.request();
+    var microphoneStatus = await Permission.microphone.request();
+
+    if ((isVideo && !cameraStatus.isGranted) || !microphoneStatus.isGranted) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Для звонков необходим доступ к камере и микрофону.")));
+      return;
+    }
+
+    print('[ChatScreen][${TimeOfDay.now()}] _startCall: Разрешения получены. Инициализируем PeerConnection...');
+    await _webRTCManager.initializeConnection();
+    _webRTCManager.isVideoEnabled = isVideo;
+
+    print('[ChatScreen][${TimeOfDay.now()}] _startCall: Переход на CallScreen...');
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => CallScreen(
+        manager: _webRTCManager,
+        isVideoCall: isVideo,
+        peerName: _peerName,
+        isInitiator: true,
+      ),
+    ));
+  }
+
+  void _showIncomingCallDialog(Map<String, dynamic> offerData) {
+    print('[ChatScreen][${TimeOfDay.now()}] -> _showIncomingCallDialog: Показываем диалог входящего звонка.');
+    final sdp = offerData['sdp']['sdp'] as String;
+    final isVideoCall = sdp.contains("m=video");
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return AlertDialog(
+          title: Text("Входящий ${isVideoCall ? 'видео' : 'аудио'}звонок от $_peerName"),
+          actions: [
+            TextButton(
+              child: const Text("Отклонить"),
+              onPressed: () {
+                print('[ChatScreen][${TimeOfDay.now()}] Диалог: Пользователь отклонил звонок.');
+                widget.chatRepository.chatSocketService.sendSignalingMessage({
+                  'type': 'call_end',
+                  'sender_id': _currentUserId,
+                });
+                Navigator.of(context).pop();
+              },
+            ),
+            TextButton(
+              child: const Text("Принять"),
+              onPressed: () {
+                print('[ChatScreen][${TimeOfDay.now()}] Диалог: Пользователь принял звонок. Переходим на CallScreen...');
+                Navigator.of(context).pop(); // Закрываем диалог
+
+                // Немедленно переходим на экран звонка, передавая ему все необходимое
+                Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => CallScreen(
+                    manager: _webRTCManager,
+                    isVideoCall: isVideoCall,
+                    peerName: _peerName,
+                    isInitiator: false, // Важно: это принимающая сторона
+                    offerSdp: offerData['sdp'], // Передаем offer для обработки на экране звонка
+                  ),
+                ));
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+
   void _startRecording() {
-    // Сбрасываем все состояния перед началом
     setState(() {
       _isPaused = false;
       _isRecordingLocked = false;
@@ -184,11 +310,16 @@ class _ChatScreenState extends State<ChatScreen> {
     print("Запись отменена.");
   }
 
-  // --- ОСНОВНАЯ СТРУКТУРА ЭКРАНА ---
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.chat.title ?? "Чат")),
+      appBar: AppBar(
+        title: Text(_peerName.isNotEmpty ? _peerName : (widget.chat.title ?? "Чат")),
+        actions: [
+          IconButton(onPressed: () => _startCall(false), icon: const Icon(Icons.call), tooltip: 'Аудиозвонок'),
+          IconButton(onPressed: () => _startCall(true), icon: const Icon(Icons.videocam), tooltip: 'Видеозвонок'),
+        ],
+      ),
       body: Column(
         children: [
           Expanded(
@@ -213,7 +344,6 @@ class _ChatScreenState extends State<ChatScreen> {
               },
             ),
           ),
-          // --- КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: ВЫНОСИМ ВСЮ ПАНЕЛЬ ВВОДА ---
           _buildInputArea(),
         ],
       ),

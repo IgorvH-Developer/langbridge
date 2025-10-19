@@ -2,23 +2,21 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../services/api_service.dart';
 
 class AuthRepository {
-  // ApiService теперь не final, чтобы избежать проблем с инициализацией
   late ApiService _apiService;
 
   final _storage = const FlutterSecureStorage();
 
-  // Ключи для безопасного хранилища теперь публичные
+  AndroidOptions _getAndroidOptions() => const AndroidOptions(
+    resetOnError: true,
+  );
+
   static const accessTokenKey = 'access_token';
   static const userIdKey = 'user_id';
 
-  // Используем конструктор для инициализации
   AuthRepository() {
-    // ApiService создается здесь, цикл разорван
     _apiService = ApiService();
   }
 
-  /// Производит вход пользователя, получает и сохраняет токен и ID пользователя.
-  /// Возвращает `true` при успехе, иначе `false`.
   Future<bool> login(String username, String password) async {
     final loginData = await _apiService.loginAndGetData(username, password);
 
@@ -29,36 +27,41 @@ class AuthRepository {
     final token = loginData['access_token']!;
     final userId = loginData['user_id']!;
 
-    await _storage.write(key: accessTokenKey, value: token);
-    await _storage.write(key: userIdKey, value: userId);
+    final options = _getAndroidOptions();
+    try {
+      await _storage.write(key: accessTokenKey, value: token, aOptions: options);
+      await _storage.write(key: userIdKey, value: userId, aOptions: options);
+    } catch (e) {
+      print("КРИТИЧЕСКАЯ ОШИБКА при записи в Secure Storage: $e");
+      await _storage.deleteAll(aOptions: options);
+      return false;
+    }
 
     return true;
   }
 
-  /// Регистрирует нового пользователя.
-  Future<bool> register(String username, String password) async {
-    return await _apiService.register(username, password);
-  }
-
-  /// Производит выход пользователя, удаляя все сохраненные данные аутентификации.
-  Future<void> logout() async {
-    await _storage.deleteAll();
-  }
-
   /// Получает сохраненный токен доступа.
   Future<String?> getToken() async {
-    return await _storage.read(key: accessTokenKey);
+    return await _storage.read(key: accessTokenKey, aOptions: _getAndroidOptions());
   }
 
   /// Статический метод для получения ID текущего аутентифицированного пользователя.
   static Future<String?> getCurrentUserId() async {
     const storage = FlutterSecureStorage();
-    return await storage.read(key: userIdKey);
+    return await storage.read(key: userIdKey, aOptions: const AndroidOptions(resetOnError: true));
   }
 
   /// Проверяет, залогинен ли пользователь (наличие токена).
   Future<bool> isLoggedIn() async {
     final token = await getToken();
     return token != null;
+  }
+
+  Future<void> logout() async {
+    await _storage.deleteAll(aOptions: _getAndroidOptions());
+  }
+
+  Future<bool> register(String username, String password) async {
+    return await _apiService.register(username, password);
   }
 }

@@ -45,7 +45,11 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
-	<key>NSMicrophoneUsageDescription</key>
-    <string>Это приложение использует микрофон для записи голосовых сообщений.</string>
+
+    <key>NSCameraUsageDescription</key>
+    <string>To make video calls, we need access to your camera.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>To make audio and video calls, we need access to your microphone.</string>
+
 </dict>
 </plist>

@@ -1,5 +1,6 @@
 import 'message.dart';
 import 'package:LangBridge/models/user_profile.dart';
+import 'package:LangBridge/config/app_config.dart';
 
 class ChatParticipant {
   final String id;
@@ -9,10 +10,18 @@ class ChatParticipant {
   ChatParticipant({required this.id, required this.username, this.avatarUrl});
 
   factory ChatParticipant.fromJson(Map<String, dynamic> json) {
+    String? rawAvatarUrl = json['avatar_url'];
+    String? fullAvatarUrl;
+    if (rawAvatarUrl != null && rawAvatarUrl.isNotEmpty) {
+      fullAvatarUrl = rawAvatarUrl.startsWith('http')
+          ? rawAvatarUrl
+          : "${AppConfig.apiBaseUrl}$rawAvatarUrl";
+    }
+
     return ChatParticipant(
       id: json['id'],
       username: json['username'],
-      avatarUrl: json['avatar_url'],
+      avatarUrl: fullAvatarUrl,
     );
   }
 }

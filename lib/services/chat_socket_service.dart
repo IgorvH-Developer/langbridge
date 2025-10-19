@@ -4,6 +4,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:uuid/uuid.dart';
+import 'package:LangBridge/repositories/auth_repository.dart'; // <<< Добавить
+import 'webrtc_manager.dart';
 
 import 'package:LangBridge/config/app_config.dart';
 import 'package:LangBridge/models/message.dart';
@@ -15,30 +17,32 @@ class ChatSocketService {
   WebSocketChannel? _channel;
   StreamSubscription? _channelSubscription;
   final Uuid _uuid = const Uuid();
+  final ValueNotifier<Map<String, dynamic>?> signalingMessageNotifier = ValueNotifier(null); // <<< Добавить
+  WebRTCManager? webRTCManager;
 
-  // 10.0.2.2 для Android эмулятора, если сервер локально.
-  // 'ws://your_server_domain.com/ws/' для развернутого сервера.
-
-  // static const String _socketBaseUrl = "ws://10.0.2.2/ws/"; // Пример для локального сервера и Android эмулятора
-  static final String _socketBaseUrl = "ws://${AppConfig.serverAddr}/ws/"; // Адрес сервера для приложений извне
-
+  static final String _socketBaseUrl = "ws://${AppConfig.serverAddr}/ws/";
   bool get isConnected => _channel != null && _channelSubscription != null && !_channelSubscription!.isPaused;
-
-  // Используем ValueNotifier для уведомления UI об изменениях списка сообщений
-  // Это простой способ, для более сложных сценариев рассмотрите Bloc или Riverpod
   final ValueNotifier<List<Message>> messagesNotifier = ValueNotifier<List<Message>>([]);
   String? currentChatId; // Made public
 
-  void connect(String chatId, List<Message> initialMessages) {
-    if (currentChatId == chatId && isConnected) { // Updated usage
+  Future<void> connect(String chatId, List<Message> initialMessages) async {
+    if (currentChatId == chatId && isConnected) {
       print("Уже подключен к чату: $chatId");
       return;
     }
-    disconnect(); // Закрываем предыдущее соединение, если есть
+    disconnect();
 
-    currentChatId = chatId; // Updated usage
-    messagesNotifier.value = List<Message>.from(initialMessages); // Инициализируем сообщениями из Chat
-    final uri = Uri.parse("$_socketBaseUrl$chatId");
+    currentChatId = chatId;
+    messagesNotifier.value = List<Message>.from(initialMessages);
+
+    final userId = await AuthRepository.getCurrentUserId();
+    if (userId == null) {
+      print("Ошибка: не удалось получить ID пользователя для подключения к сокету.");
+      return;
+    }
+
+    final uri = Uri.parse("$_socketBaseUrl$chatId?user_id=$userId");
+
     print("Подключение к WebSocket: $uri");
 
     _channel = WebSocketChannel.connect(uri);
@@ -47,15 +51,17 @@ class ChatSocketService {
       (event) {
         print("Получено от сокета ($chatId): $event");
         try {
-          final Map<String, dynamic> messageData = jsonDecode(event);
-          // !!! ВАЖНО: Убедитесь, что Message.fromJson корректно обрабатывает данные от сервера
-          // Например, сервер может не отправлять 'id' или 'timestamp', их можно генерировать на клиенте
-          // или ожидать от сервера. Также поля 'sender', 'content', 'type'.
-          final newMessage = Message.fromJson(messageData); // Предполагаем, что у вас есть Message.fromJson
+          final Map<String, dynamic> data = jsonDecode(event);
+          final type = data['type'] as String?;
 
-          // Добавляем сообщение в начало списка для отображения новых сверху или в конец, если reverse в ListView
-          final updatedMessages = List<Message>.from(messagesNotifier.value)..add(newMessage);
-          messagesNotifier.value = updatedMessages;
+          // <<< НАЧАЛО ИЗМЕНЕНИЙ: Обработка сигнальных сообщений >>>
+          if (type == 'call_offer' || type == 'call_answer' || type == 'ice_candidate' || type == 'call_end') {
+            signalingMessageNotifier.value = data;
+          } else {
+            final newMessage = Message.fromJson(data);
+            final updatedMessages = List<Message>.from(messagesNotifier.value)..add(newMessage);
+            messagesNotifier.value = updatedMessages;
+          }
 
         } catch (e) {
           print("Ошибка декодирования сообщения от сокета ($chatId): $e");
@@ -103,6 +109,13 @@ class ChatSocketService {
     );
   }
 
+  void sendSignalingMessage(Map<String, dynamic> message) {
+    if (_channel == null) return;
+    final messageJson = jsonEncode(message);
+    print("Отправка сигнального сообщения: $messageJson");
+    _channel!.sink.add(messageJson);
+  }
+
   void sendMessage({
     required String sender, // ID текущего пользователя
     required String content,
@@ -135,29 +148,23 @@ class ChatSocketService {
     final updatedMessages = List<Message>.from(messagesNotifier.value)..add(message);
     messagesNotifier.value = updatedMessages;
 
-    // Отправляем на сервер. Сервер может вернуть это же сообщение с серверным ID/timestamp
-    // или просто подтверждение. Ваша логика обработки входящих сообщений должна это учесть
-    // (например, не дублировать, если ID совпадает).
-    // Формат сообщения должен соответствовать ожиданиям бэкенда.
     final messageJson = jsonEncode({
-      'sender_id': message.sender, // или просто 'sender'
+      'sender_id': message.sender,
       'content': message.content,
-      'type': message.type.toString().split('.').last, // 'text', 'video'
-      // 'chat_id': currentChatId, // Updated usage // Если бэкенд требует chat_id в теле сообщения
+      'type': message.type.toString().split('.').last,
     });
     print("Отправка сообщения ($currentChatId): $messageJson"); // Updated usage
     _channel!.sink.add(messageJson);
   }
 
   void disconnect() {
-    print("Отключение от чата: $currentChatId"); // Updated usage
+    print("Отключение от чата: $currentChatId");
+    webRTCManager?.dispose(); // <<< Добавить
+    webRTCManager = null; // <<< Добавить
     _channelSubscription?.cancel();
     _channel?.sink.close();
     _channelSubscription = null;
     _channel = null;
-    // Очищать ли messagesNotifier.value здесь - зависит от вашей логики.
-    // Если при выходе с экрана чата сообщения должны исчезать, то да.
-    // messagesNotifier.value = []; // Опционально
-    currentChatId = null; // Updated usage
+    currentChatId = null;
   }
 }

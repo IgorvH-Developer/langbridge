@@ -64,26 +64,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _loadProfile() async {
     setState(() => _isLoading = true);
+
     String? targetUserId = widget.userId;
 
+    // 1. Определяем, чей ID нам нужен.
     if (targetUserId == null) {
+      // Если ID не передан в виджет, значит, это наш собственный профиль.
       targetUserId = await AuthRepository.getCurrentUserId();
-      if (targetUserId != null) {
-        _isMyProfile = true;
+      if (mounted) { // Проверяем, существует ли еще виджет
+        setState(() {
+          _isMyProfile = true;
+        });
       }
     }
 
+    // 2. Если ID все еще не определен (например, пользователь не залогинен), выходим.
     if (targetUserId == null) {
-      // Не смогли определить пользователя
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+        // Можно показать сообщение об ошибке
+      }
+      print("Ошибка: не удалось определить ID пользователя для загрузки профиля.");
       return;
     }
 
-    // Запрос остается прежним, так как он уже использует ID
-    final data = await _apiService.getUserProfile(targetUserId);
+    // 3. Загружаем профиль по найденному ID.
+    final userProfileData = await _apiService.getUserProfile(targetUserId);
+
+    // 4. Обновляем состояние с полученными данными.
     if (mounted) {
       setState(() {
-        _profile = data;
+        _profile = userProfileData;
         _isLoading = false;
       });
     }

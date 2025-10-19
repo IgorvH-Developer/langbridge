@@ -8,8 +8,10 @@ import 'dart:async' as _i7;
 import 'package:flutter/foundation.dart' as _i3;
 import 'package:LangBridge/models/chat.dart' as _i5;
 import 'package:LangBridge/models/message.dart' as _i6;
+import 'package:LangBridge/models/transcription_data.dart' as _i8;
 import 'package:LangBridge/repositories/chat_repository.dart' as _i4;
 import 'package:LangBridge/services/chat_socket_service.dart' as _i2;
+import 'package:LangBridge/services/webrtc_manager.dart' as _i9;
 import 'package:mockito/mockito.dart' as _i1;
 
 // ignore_for_file: type=lint
@@ -90,12 +92,29 @@ class MockChatRepository extends _i1.Mock implements _i4.ChatRepository {
           as _i7.Future<void>);
 
   @override
+  _i7.Future<_i5.Chat?> getOrCreatePrivateChat(String? partnerId) =>
+      (super.noSuchMethod(
+            Invocation.method(#getOrCreatePrivateChat, [partnerId]),
+            returnValue: _i7.Future<_i5.Chat?>.value(),
+          )
+          as _i7.Future<_i5.Chat?>);
+
+  @override
   _i7.Future<_i5.Chat?> createNewChat(String? title) =>
       (super.noSuchMethod(
             Invocation.method(#createNewChat, [title]),
             returnValue: _i7.Future<_i5.Chat?>.value(),
           )
           as _i7.Future<_i5.Chat?>);
+
+  @override
+  _i7.Future<void> markChatAsRead(String? chatId) =>
+      (super.noSuchMethod(
+            Invocation.method(#markChatAsRead, [chatId]),
+            returnValue: _i7.Future<void>.value(),
+            returnValueForMissingStub: _i7.Future<void>.value(),
+          )
+          as _i7.Future<void>);
 
   @override
   _i7.Future<void> connectToChat(_i5.Chat? chat) =>
@@ -144,10 +163,135 @@ class MockChatRepository extends _i1.Mock implements _i4.ChatRepository {
           as _i7.Future<void>);
 
   @override
-  _i7.Future<String?> transcribeMessage(String? messageId) =>
+  _i7.Future<void> sendAudioMessage({
+    required String? filePath,
+    required String? chatId,
+    required String? senderId,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(#sendAudioMessage, [], {
+              #filePath: filePath,
+              #chatId: chatId,
+              #senderId: senderId,
+            }),
+            returnValue: _i7.Future<void>.value(),
+            returnValueForMissingStub: _i7.Future<void>.value(),
+          )
+          as _i7.Future<void>);
+
+  @override
+  _i7.Future<_i8.TranscriptionData?> transcribeMessage(String? messageId) =>
       (super.noSuchMethod(
             Invocation.method(#transcribeMessage, [messageId]),
-            returnValue: _i7.Future<String?>.value(),
+            returnValue: _i7.Future<_i8.TranscriptionData?>.value(),
           )
-          as _i7.Future<String?>);
+          as _i7.Future<_i8.TranscriptionData?>);
+
+  @override
+  _i7.Future<void> fetchAndApplyTranscription(String? messageId) =>
+      (super.noSuchMethod(
+            Invocation.method(#fetchAndApplyTranscription, [messageId]),
+            returnValue: _i7.Future<void>.value(),
+            returnValueForMissingStub: _i7.Future<void>.value(),
+          )
+          as _i7.Future<void>);
+
+  @override
+  _i7.Future<void> saveTranscription(
+    String? messageId,
+    _i8.TranscriptionData? data,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#saveTranscription, [messageId, data]),
+            returnValue: _i7.Future<void>.value(),
+            returnValueForMissingStub: _i7.Future<void>.value(),
+          )
+          as _i7.Future<void>);
+}
+
+/// A class which mocks [ChatSocketService].
+///
+/// See the documentation for Mockito's code generation for more information.
+class MockChatSocketService extends _i1.Mock implements _i2.ChatSocketService {
+  MockChatSocketService() {
+    _i1.throwOnMissingStub(this);
+  }
+
+  @override
+  _i3.ValueNotifier<Map<String, dynamic>?> get signalingMessageNotifier =>
+      (super.noSuchMethod(
+            Invocation.getter(#signalingMessageNotifier),
+            returnValue: _FakeValueNotifier_1<Map<String, dynamic>?>(
+              this,
+              Invocation.getter(#signalingMessageNotifier),
+            ),
+          )
+          as _i3.ValueNotifier<Map<String, dynamic>?>);
+
+  @override
+  bool get isConnected =>
+      (super.noSuchMethod(Invocation.getter(#isConnected), returnValue: false)
+          as bool);
+
+  @override
+  _i3.ValueNotifier<List<_i6.Message>> get messagesNotifier =>
+      (super.noSuchMethod(
+            Invocation.getter(#messagesNotifier),
+            returnValue: _FakeValueNotifier_1<List<_i6.Message>>(
+              this,
+              Invocation.getter(#messagesNotifier),
+            ),
+          )
+          as _i3.ValueNotifier<List<_i6.Message>>);
+
+  @override
+  set webRTCManager(_i9.WebRTCManager? value) => super.noSuchMethod(
+    Invocation.setter(#webRTCManager, value),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  set currentChatId(String? value) => super.noSuchMethod(
+    Invocation.setter(#currentChatId, value),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  _i7.Future<void> connect(
+    String? chatId,
+    List<_i6.Message>? initialMessages,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#connect, [chatId, initialMessages]),
+            returnValue: _i7.Future<void>.value(),
+            returnValueForMissingStub: _i7.Future<void>.value(),
+          )
+          as _i7.Future<void>);
+
+  @override
+  void sendSignalingMessage(Map<String, dynamic>? message) =>
+      super.noSuchMethod(
+        Invocation.method(#sendSignalingMessage, [message]),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  void sendMessage({
+    required String? sender,
+    required String? content,
+    _i6.MessageType? type = _i6.MessageType.text,
+  }) => super.noSuchMethod(
+    Invocation.method(#sendMessage, [], {
+      #sender: sender,
+      #content: content,
+      #type: type,
+    }),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void disconnect() => super.noSuchMethod(
+    Invocation.method(#disconnect, []),
+    returnValueForMissingStub: null,
+  );
 }

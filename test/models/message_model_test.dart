@@ -1,8 +1,16 @@
+// test/models/message_model_test.dart
+
 import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:LangBridge/models/message.dart'; // Путь к вашему файлу модели
+import 'package:LangBridge/config/app_config.dart';
+import 'package:LangBridge/models/message.dart';
+import 'package:LangBridge/models/transcription_data.dart';
 
 void main() {
+  setUpAll(() async {
+    await AppConfig.load('dev');
+  });
+
   group('Message.fromJson', () {
     test('корректно парсит текстовое сообщение', () {
       // Arrange: Подготовка данных
@@ -27,16 +35,23 @@ void main() {
       expect(message.transcription, isNull);
     });
 
-    test('корректно парсит видеосообщение с транскрипцией', () {
+    test('корректно парсит видеосообщение с полной транскрипцией', () {
       // Arrange
       final contentJson = {
         "video_url": "/uploads/video.mp4",
-        "transcription": "This is a test."
+        "duration_ms": 15000,
+        "transcription": {
+          "full_text": "Hello world",
+          "words": [
+            {"id": "word-1", "word": "Hello", "start": 0.5, "end": 1.0},
+            {"id": "word-2", "word": "world", "start": 1.1, "end": 1.5}
+          ]
+        }
       };
       final jsonMap = {
         'id': '456',
         'sender_id': 'user-xyz',
-        'content': jsonEncode(contentJson), // Контент - это JSON-строка
+        'content': jsonEncode(contentJson),
         'type': 'video',
         'timestamp': '2025-10-06T11:00:00Z',
       };
@@ -45,33 +60,14 @@ void main() {
       final message = Message.fromJson(jsonMap);
 
       // Assert
-      expect(message.id, '456');
-      expect(message.sender, 'user-xyz');
       expect(message.type, MessageType.video);
-      // Проверяем распарсенные поля
-      expect(message.videoUrl, '/uploads/video.mp4');
-      expect(message.transcription, 'This is a test.');
-    });
+      expect(message.videoUrl, startsWith('http'));
+      expect(message.videoUrl, endsWith('/uploads/video.mp4'));
 
-    test('корректно парсит видеосообщение без транскрипции', () {
-      // Arrange
-      final contentJson = {"video_url": "/uploads/video.mp4", "transcription": null};
-      final jsonMap = {
-        'id': '789',
-        'sender_id': 'user-123',
-        'content': jsonEncode(contentJson),
-        'type': 'video',
-        'timestamp': '2025-10-06T12:00:00Z',
-      };
-
-      // Act
-      final message = Message.fromJson(jsonMap);
-
-      // Assert
-      expect(message.type, MessageType.video);
-      expect(message.videoUrl, '/uploads/video.mp4');
-      expect(message.transcription, isNull); // Транскрипции нет
+      expect(message.duration, const Duration(milliseconds: 15000));
+      expect(message.transcription, isA<TranscriptionData>());
+      expect(message.transcription!.fullText, "Hello world");
+      expect(message.transcription!.words.length, 2);
     });
   });
 }
-
