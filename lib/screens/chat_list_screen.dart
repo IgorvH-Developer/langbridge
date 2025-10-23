@@ -158,7 +158,6 @@ class _ChatListScreenState extends State<ChatListScreen> {
                   ),
                 ),
               );
-              _loadData();
               final updatedDrafts = await _loadAllDrafts();
               if (mounted) setState(() => _drafts = updatedDrafts);
             },

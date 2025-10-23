@@ -268,18 +268,28 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _stopRecordingAndSend() async {
     // if (!_soundRecorder.isRecording) return;
     _recordingTimer?.cancel();
+
+    // 1. Останавливаем запись и получаем финальный путь.
     final path = await _soundRecorder.stop();
 
-    // Сбрасываем все состояния
-    setState(() {
-      _isRecording = false;
-      _isRecordingLocked = false;
-      _isPaused = false;
-      _dragOffset = 0;
-    });
-
+    // 2. Проверяем, есть ли что отправлять. Если да, отправляем НЕМЕДЛЕННО.
     if (path != null && File(path).existsSync()) {
+      // Сначала выполняем сетевой запрос.
       await _sendMedia(path, MessageType.audio);
+    } else {
+      print("Ошибка: путь к записанному файлу не был получен после остановки.");
+    }
+
+    // 3. И только ПОСЛЕ отправки сбрасываем состояние UI.
+    // Это гарантирует, что UI не перерисовывается в промежуточном состоянии.
+    if (mounted) {
+      setState(() {
+        _isRecording = false;
+        _isRecordingLocked = false;
+        _isPaused = false;
+        _dragOffset = 0;
+        _recordingPath = null;
+      });
     }
   }
 
@@ -292,7 +302,6 @@ class _ChatScreenState extends State<ChatScreen> {
     } catch (e) {
       print("Error stopping recorder on cancel: $e");
     }
-
 
     if (_recordingPath != null && File(_recordingPath!).existsSync()) {
       try {
@@ -594,12 +603,17 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _loadCurrentUserAndConnect() async {
     final userId = await AuthRepository.getCurrentUserId();
-    if (userId != null) {
-      setState(() {
-        _currentUserId = userId;
-      });
-      widget.chatRepository.connectToChat(widget.chat);
+    if (!mounted || userId == null) return;
+
+    setState(() {
+      _currentUserId = userId;
+    });
+
+    if (widget.chat.unreadCount > 0) {
+      widget.chatRepository.markChatAsRead(widget.chat.id);
     }
+
+    await widget.chatRepository.connectToChat(widget.chat);
   }
 
   void _sendMessage() {

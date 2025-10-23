@@ -1,52 +1,54 @@
-// /home/hlopin/Study_Projects/langbridge/test/widgets/fake_video_player.dart
-
 import 'dart:async';
-import 'package:flutter/widgets.dart'; // <<< ИЗМЕНЕНИЕ: Импортируем flutter/widgets.dart
+import 'package:flutter/widgets.dart';
 import 'package:video_player_platform_interface/video_player_platform_interface.dart';
 
-// Эта реализация взята из официальных тестов пакета video_player
-// и адаптирована для простоты.
-
 class FakeVideoPlayerPlatform extends VideoPlayerPlatform {
-  Completer<void>? _initCompleter;
-  StreamController<VideoEvent>? _streamController;
-  bool isInitialized = false;
+  final Map<int, Completer<void>> _initCompleters = {};
+  final Map<int, StreamController<VideoEvent>> _streamControllers = {};
+  int _textureCounter = 0;
   final Map<int, bool> _isBuffering = <int, bool>{};
   final Map<int, Duration> _position = <int, Duration>{};
 
   @override
-  Future<void> init() async {
-    _initCompleter = Completer<void>();
-    return _initCompleter!.future;
+  Future<int?> create(DataSource dataSource) async {
+    final textureId = _textureCounter++;
+    final controller = StreamController<VideoEvent>.broadcast();
+    _streamControllers[textureId] = controller;
+    controller.add(
+      VideoEvent(
+        eventType: VideoEventType.initialized,
+        duration: const Duration(seconds: 10),
+        size: const Size(100, 100),
+      ),
+    );
+    return textureId;
   }
 
   @override
   Future<void> dispose(int textureId) async {
-    _streamController?.close();
+    _streamControllers[textureId]?.close();
+    _streamControllers.remove(textureId);
   }
 
+  void disposeAll() {
+    for (final controller in _streamControllers.values) {
+      controller.close();
+    }
+    _streamControllers.clear();
+  }
+  // >>>>> КОНЕЦ ИСПРАВЛЕНИЯ <<<<<
+
   @override
-  Future<int?> create(DataSource dataSource) async {
-    final int textureId = _textureCounter;
-    _streamController = StreamController<VideoEvent>();
-    _isBuffering[textureId] = false;
-    _position[textureId] = Duration.zero;
+  Stream<VideoEvent> videoEventsFor(int textureId) {
+    return _streamControllers[textureId]?.stream ?? const Stream.empty();
+  }
 
-    // Имитируем успешную инициализацию
-    Future<void>.delayed(const Duration(milliseconds: 10), () {
-      _streamController!.add(
-        VideoEvent(
-          eventType: VideoEventType.initialized,
-          duration: const Duration(seconds: 15), // Примерная длительность
-          size: const Size(1280, 720),
-        ),
-      );
-      isInitialized = true;
-      _initCompleter?.complete();
-    });
+  // Остальные методы без изменений
 
-    _textureCounter++;
-    return textureId;
+  @override
+  Future<void> init() async {
+    // Этот метод вызывается один раз и может оставаться пустым.
+    // Важная логика теперь в create().
   }
 
   @override
@@ -69,19 +71,11 @@ class FakeVideoPlayerPlatform extends VideoPlayerPlatform {
 
   @override
   Future<Duration> getPosition(int textureId) async {
-    return _position[textureId]!;
-  }
-
-  @override
-  Stream<VideoEvent> videoEventsFor(int textureId) {
-    _streamController ??= StreamController<VideoEvent>();
-    return _streamController!.stream;
+    return _position[textureId] ?? Duration.zero;
   }
 
   @override
   Widget buildView(int textureId) {
     return const SizedBox(width: 100, height: 100, child: Text('FakeVideoView'));
   }
-
-  static int _textureCounter = 1;
 }

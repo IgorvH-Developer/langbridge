@@ -34,30 +34,34 @@ class MessageBubble extends StatelessWidget {
               : Colors.grey.shade300,
           borderRadius: BorderRadius.circular(12),
         ),
-        child: Column(
-          crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-          children: [
-            if (!isUser && !isSystem)
+        child: IntrinsicWidth(
+          child: Column(
+            crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (!isUser && !isSystem)
+                Text(
+                  message.sender,
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.black54),
+                ),
+              if (message.type == MessageType.text)
+                Text(message.content)
+              else if (message.type == MessageType.video || message.type == MessageType.audio)
+                MediaTranscriptionWidget(
+                  message: message,
+                  chatRepository: chatRepository,
+                  isUser: isUser,
+                  key: ValueKey(message.content)
+                )
+              else
+                const Text("Unsupported message type"),
+              const SizedBox(height: 4),
               Text(
-                message.sender, // В будущем можно подтягивать имя пользователя
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.black54),
+                "${message.timestamp.hour.toString().padLeft(2, '0')}:${message.timestamp.minute.toString().padLeft(2, '0')}",
+                style: const TextStyle(fontSize: 10, color: Colors.black54),
               ),
-            if (message.type == MessageType.text)
-              Text(message.content)
-            else if (message.type == MessageType.video || message.type == MessageType.audio)
-              MediaTranscriptionWidget(
-                message: message,
-                chatRepository: chatRepository,
-                isUser: isUser,
-              )
-            else
-              Text("Unsupported message type"),
-            SizedBox(height: 4),
-            Text(
-              "${message.timestamp.hour.toString().padLeft(2, '0')}:${message.timestamp.minute.toString().padLeft(2, '0')}",
-              style: TextStyle(fontSize: 10, color: Colors.black54),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

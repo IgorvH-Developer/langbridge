@@ -35,6 +35,8 @@ class _MediaTranscriptionWidgetState extends State<MediaTranscriptionWidget> {
   Duration _currentPosition = Duration.zero;
   List<double> _waveformData = [];
 
+  bool _isTranscriptionLoading = false;
+
   @override
   void initState() {
     super.initState();
@@ -47,8 +49,44 @@ class _MediaTranscriptionWidgetState extends State<MediaTranscriptionWidget> {
 
     if (widget.message.transcription != null) {
       _editableTranscription = TranscriptionData.fromJson(widget.message.transcription!.toJson());
+      _isTranscriptionPanelVisible = true;
     }
   }
+
+  @override
+  void didUpdateWidget(covariant MediaTranscriptionWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (widget.message.id != oldWidget.message.id) {
+      setState(() {
+        // СБРАСЫВАЕМ ВСЕ ЛОКАЛЬНОЕ СОСТОЯНИЕ, связанное с предыдущим сообщением
+        _isPlaying = false;
+        _currentPosition = Duration.zero;
+        _isTranscriptionPanelVisible = false;
+        _isTranscriptionLoading = false;
+        _currentWordIndex = -1;
+
+        _editableTranscription = widget.message.transcription != null
+            ? TranscriptionData.fromJson(widget.message.transcription!.toJson())
+            : null;
+
+        _isTranscriptionPanelVisible = widget.message.transcription != null;
+      });
+      if (widget.message.audioUrl != oldWidget.message.audioUrl && widget.message.audioUrl != null) {
+        _audioPlayer.setSourceUrl(widget.message.audioUrl!);
+      }
+    }
+    else if (widget.message.transcription != oldWidget.message.transcription) {
+      setState(() {
+        if (widget.message.transcription != null) {
+          _editableTranscription = TranscriptionData.fromJson(widget.message.transcription!.toJson());
+          _isTranscriptionPanelVisible = true;
+        }
+        _isTranscriptionLoading = false;
+      });
+    }
+  }
+
 
   void _generateFakeWaveform() {
     final random = Random();
@@ -72,7 +110,6 @@ class _MediaTranscriptionWidgetState extends State<MediaTranscriptionWidget> {
         _isPlaying = isPlaying;
       });
     }
-    // Для видео обновляем позицию здесь
     _onPositionChanged(position: value.position);
     if(mounted) {
       setState(() {
@@ -83,46 +120,26 @@ class _MediaTranscriptionWidgetState extends State<MediaTranscriptionWidget> {
 
   void _initAudioPlayer() {
     _audioPlayer.setSourceUrl(widget.message.audioUrl!);
-
     _audioPlayer.onPlayerStateChanged.listen((state) {
       if (!mounted) return;
-      setState(() {
-        _isPlaying = state == PlayerState.playing;
-      });
-
-      // **РЕШЕНИЕ ПРОБЛЕМЫ №1**: Если воспроизведение завершено, сбрасываем состояние
+      setState(() { _isPlaying = state == PlayerState.playing; });
       if (state == PlayerState.completed) {
-        setState(() {
-          _currentPosition = Duration.zero; // Сбрасываем позицию на начало
-        });
+        setState(() { _currentPosition = Duration.zero; });
       }
     });
-
-    // Слушаем изменение позиции
     _audioPlayer.onPositionChanged.listen((duration) {
       if (!mounted) return;
-      // Обновляем и позицию, и связанные данные (подсветка слов)
       _onPositionChanged(position: duration);
-      setState(() {
-        _currentPosition = duration;
-      });
+      setState(() { _currentPosition = duration; });
     });
   }
-  // --- КОНЕЦ ИЗМЕНЕНИЙ ---
 
   void _onPositionChanged({Duration? position}) {
     if (!mounted || _editableTranscription == null || _editableTranscription!.words.isEmpty) return;
-
     final currentPositionInSeconds = (position?.inMilliseconds ?? 0) / 1000.0;
-
-    final index = _editableTranscription!.words.lastIndexWhere(
-            (word) => currentPositionInSeconds >= word.start
-    );
-
+    final index = _editableTranscription!.words.lastIndexWhere((word) => currentPositionInSeconds >= word.start);
     if (index != -1 && index != _currentWordIndex) {
-      setState(() {
-        _currentWordIndex = index;
-      });
+      setState(() { _currentWordIndex = index; });
     }
   }
 
@@ -143,13 +160,9 @@ class _MediaTranscriptionWidgetState extends State<MediaTranscriptionWidget> {
       if (_isPlaying) {
         await _audioPlayer.pause();
       } else {
-        // **РЕШЕНИЕ ПРОБЛЕМЫ №1**: Если плеер завершил работу и позиция в конце,
-        // нужно запустить его с самого начала.
         if (_currentPosition >= (widget.message.duration ?? Duration.zero) - const Duration(milliseconds: 200)) {
-          // Начинаем с нуля
           await _audioPlayer.seek(Duration.zero);
         }
-        // resume() сработает и для начала, и для продолжения после паузы
         await _audioPlayer.resume();
       }
     }
@@ -158,17 +171,12 @@ class _MediaTranscriptionWidgetState extends State<MediaTranscriptionWidget> {
   void _seek(double newPositionRatio) {
     if (widget.message.duration == null) return;
     final newPosition = widget.message.duration! * newPositionRatio;
-
     if (widget.message.type == MessageType.video) {
       _videoController?.seekTo(newPosition);
     } else if (widget.message.type == MessageType.audio) {
       _audioPlayer.seek(newPosition);
     }
-
-    // Оптимистичное обновление UI, чтобы не ждать следующего тика от плеера
-    setState(() {
-      _currentPosition = newPosition;
-    });
+    setState(() { _currentPosition = newPosition; });
   }
 
   void _editWord(TranscriptionWord word, int index) {
@@ -177,15 +185,9 @@ class _MediaTranscriptionWidgetState extends State<MediaTranscriptionWidget> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Редактировать слово'),
-        content: TextField(
-          controller: textController,
-          autofocus: true,
-        ),
+        content: TextField(controller: textController, autofocus: true),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Отмена'),
-          ),
+          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Отмена')),
           TextButton(
             onPressed: () {
               if (!mounted) return;
@@ -202,17 +204,107 @@ class _MediaTranscriptionWidgetState extends State<MediaTranscriptionWidget> {
     );
   }
 
-  // --- ИЗМЕНЕНИЯ В _buildAudioPlayer ---
+  Future<void> _requestTranscriptionIfNeeded() async {
+    if (_editableTranscription != null || _isTranscriptionLoading) return;
+
+    if (mounted) {
+      setState(() {
+        _isTranscriptionLoading = true;
+      });
+    }
+
+    await widget.chatRepository.fetchAndApplyTranscription(widget.message.id);
+  }
+
+  void _toggleTranscriptionPanel() {
+    setState(() {
+      _isTranscriptionPanelVisible = !_isTranscriptionPanelVisible;
+    });
+
+    if (_isTranscriptionPanelVisible && widget.message.transcription == null) {
+      _requestTranscriptionIfNeeded();
+    }
+  }
+
+  Widget _buildTranscriptionPanel() {
+    if (_isTranscriptionLoading) {
+      return const Padding(
+        padding: EdgeInsets.all(8.0),
+        child: Center(child: Text("Транскрипция загружается...")),
+      );
+    }
+
+    if (_editableTranscription == null) {
+      return const Padding(
+        padding: EdgeInsets.all(8.0),
+        child: Center(child: Text("Транскрипция недоступна.", style: TextStyle(color: Colors.grey))),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(8.0),
+      margin: const EdgeInsets.only(top: 4.0),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade200,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        children: [
+          Wrap(
+            spacing: 4.0,
+            runSpacing: 4.0,
+            children: _editableTranscription!.words.asMap().entries.map((entry) {
+              int index = entry.key;
+              TranscriptionWord word = entry.value;
+              return InkWell(
+                onTap: () => _editWord(word, index),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: index == _currentWordIndex ? Colors.blue.shade100 : Colors.transparent,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(word.word),
+                ),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 8),
+          if (widget.isUser)
+            ElevatedButton(
+              onPressed: () {
+                widget.chatRepository.saveTranscription(widget.message.id, _editableTranscription!);
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Изменения сохранены!")));
+              },
+              child: const Text('Сохранить изменения'),
+            ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: widget.isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      children: [
+        if (widget.message.type == MessageType.video)
+          _buildVideoPlayer()
+        else if (widget.message.type == MessageType.audio)
+          _buildAudioPlayer()
+        else
+          const SizedBox.shrink(),
+        if (_isTranscriptionPanelVisible) _buildTranscriptionPanel(),
+      ],
+    );
+  }
+
   Widget _buildAudioPlayer() {
-    // **РЕШЕНИЕ ПРОБЛЕМЫ №2**: Убедимся, что totalDuration не 0.
     final totalDuration = (widget.message.duration != null && widget.message.duration! > Duration.zero)
         ? widget.message.duration!
-        : const Duration(seconds: 1); // Безопасное значение по умолчанию
+        : const Duration(seconds: 1);
 
     final playedRatio = (_currentPosition.inMilliseconds / totalDuration.inMilliseconds).clamp(0.0, 1.0);
-    // Отладочный вывод, который поможет, если проблема останется
-    // print("Pos: ${_currentPosition.inMilliseconds}, Total: ${totalDuration.inMilliseconds}, Ratio: $playedRatio");
-
     return GestureDetector(
       onTapDown: (details) {
         final RenderBox box = context.findRenderObject() as RenderBox;
@@ -253,32 +345,6 @@ class _MediaTranscriptionWidgetState extends State<MediaTranscriptionWidget> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    if (widget.message.transcription != null && _editableTranscription == null) {
-      _editableTranscription = TranscriptionData.fromJson(widget.message.transcription!.toJson());
-    }
-
-    return Column(
-      crossAxisAlignment: widget.isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-      children: [
-        if (widget.message.type == MessageType.video)
-          _buildVideoPlayer()
-        else if (widget.message.type == MessageType.audio)
-        // Для аудио не нужен _buildControlsOverlay, его заменяет _buildAudioPlayer
-          _buildAudioPlayer()
-        else
-        // Это текстовое сообщение, для него не нужен медиа-виджет
-        // Этот блок по идее не должен вызываться, т.к. MessageBubble
-        // вызывает этот виджет только для media.
-          const SizedBox.shrink(),
-
-        // Панель транскрипции идет отдельно
-        if (_isTranscriptionPanelVisible) _buildTranscriptionPanel(),
-      ],
-    );
-  }
-
   Widget _buildVideoPlayer() {
     return AspectRatio(
       aspectRatio: _videoController?.value.aspectRatio ?? 16 / 9,
@@ -298,7 +364,6 @@ class _MediaTranscriptionWidgetState extends State<MediaTranscriptionWidget> {
     );
   }
 
-  // Этот виджет теперь ТОЛЬКО для видео
   Widget _buildControlsOverlay() {
     return Container(
       color: Colors.black.withOpacity(0.5),
@@ -319,122 +384,51 @@ class _MediaTranscriptionWidgetState extends State<MediaTranscriptionWidget> {
       ),
     );
   }
-
-  Future<void> _requestTranscriptionIfNeeded() async {
-    if (_editableTranscription != null) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Запрос расшифровки...")),
-    );
-
-    await widget.chatRepository.fetchAndApplyTranscription(widget.message.id);
-  }
-
-  void _toggleTranscriptionPanel() {
-    if (widget.message.transcription == null) {
-      _requestTranscriptionIfNeeded();
-      return;
-    }
-    setState(() {
-      _isTranscriptionPanelVisible = !_isTranscriptionPanelVisible;
-    });
-  }
-
-  Widget _buildTranscriptionPanel() {
-    if (_editableTranscription == null) {
-      return const Padding(
-        padding: EdgeInsets.all(8.0),
-        child: Center(child: Text("Транскрипция загружается...")),
-      );
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(8.0),
-      margin: const EdgeInsets.only(top: 4.0),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade200,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        children: [
-          Wrap(
-            spacing: 4.0,
-            runSpacing: 4.0,
-            children: _editableTranscription!.words.asMap().entries.map((entry) {
-              int index = entry.key;
-              TranscriptionWord word = entry.value;
-              return InkWell(
-                onTap: () => _editWord(word, index),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: index == _currentWordIndex ? Colors.yellow.shade400 : Colors.transparent,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(word.word),
-                ),
-              );
-            }).toList(),
-          ),
-          const SizedBox(height: 8),
-          ElevatedButton(
-            onPressed: () {
-              widget.chatRepository.saveTranscription(widget.message.id, _editableTranscription!);
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Транскрипция сохранена")));
-            },
-            child: const Text("Сохранить изменения"),
-          )
-        ],
-      ),
-    );
-  }
 }
 
 
-// --- НОВЫЙ КЛАСС PAINTER ---
 class WaveformPainter extends CustomPainter {
   final List<double> waveformData;
-  final double playedRatio; // От 0.0 до 1.0
+  final double playedRatio;
   final bool isUser;
 
-  WaveformPainter({
-    required this.waveformData,
-    required this.playedRatio,
-    required this.isUser,
-  });
+  WaveformPainter({required this.waveformData, required this.playedRatio, required this.isUser});
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (waveformData.isEmpty) return;
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2;
 
-    final playedColor = isUser ? Colors.white : Colors.blue.shade200;
-    final unplayedColor = isUser ? Colors.blue.shade200 : Colors.grey.shade400;
+    final playedPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2
+      ..color = Colors.blueAccent;
 
-    final paintPlayed = Paint()..color = playedColor;
-    final paintUnplayed = Paint()..color = unplayedColor;
+    final path = Path();
+    final playedPath = Path();
 
+    final middleY = size.height / 2;
     final barWidth = size.width / waveformData.length;
-    final barSpacing = barWidth * 0.4; // 40% от ширины столбика будет отступом
-    final singleBarWidth = barWidth - barSpacing;
-    final maxHeight = size.height;
-
-    final playedBarsCount = (waveformData.length * playedRatio).floor();
 
     for (int i = 0; i < waveformData.length; i++) {
-      final barHeight = waveformData[i] * maxHeight;
-      final x = i * barWidth;
-      final y = (maxHeight - barHeight) / 2;
+      final barHeight = waveformData[i] * size.height;
+      final startX = i * barWidth;
+      final startY = middleY - barHeight / 2;
 
-      final rect = Rect.fromLTWH(x, y, singleBarWidth, barHeight);
+      final currentPath = (i / waveformData.length < playedRatio) ? playedPath : path;
 
-      final paint = i < playedBarsCount ? paintPlayed : paintUnplayed;
-      canvas.drawRect(rect, paint);
+      currentPath.moveTo(startX, startY);
+      currentPath.lineTo(startX, startY + barHeight);
     }
+
+    paint.color = isUser ? Colors.grey.shade600 : Colors.white70;
+    canvas.drawPath(path, paint);
+    canvas.drawPath(playedPath, playedPaint);
   }
 
   @override
   bool shouldRepaint(covariant WaveformPainter oldDelegate) {
-    // Перерисовываем, если изменился прогресс или данные волны
-    return oldDelegate.playedRatio != playedRatio || oldDelegate.waveformData != waveformData;
+    return oldDelegate.playedRatio != playedRatio || oldDelegate.isUser != isUser;
   }
 }
