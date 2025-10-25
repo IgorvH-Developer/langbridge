@@ -5,6 +5,7 @@ import 'package:LangBridge/models/chat.dart';
 import 'package:LangBridge/models/message.dart';
 import 'package:LangBridge/models/transcription_data.dart';
 import 'package:LangBridge/services/api_service.dart';
+import 'package:LangBridge/models/user_profile.dart';
 
 class ChatRepository {
   final _uuid = const Uuid();
@@ -29,6 +30,10 @@ class ChatRepository {
     } else {
       _chatsNotifier.value = [];
     }
+  }
+
+  Future<UserProfile?> getUserProfile(String userId) async {
+    return await _apiService.getUserProfile(userId);
   }
 
   Future<Chat?> getOrCreatePrivateChat(String partnerId) async {

@@ -7,12 +7,16 @@ class MessageBubble extends StatelessWidget {
   final Message message;
   final String currentUserId;
   final ChatRepository chatRepository;
+  final Map<String, String> nicknamesCache;
+  final Future<String> Function(String userId) getNickname;
 
   const MessageBubble({
     Key? key,
     required this.message,
     required this.currentUserId,
     required this.chatRepository,
+    required this.nicknamesCache,
+    required this.getNickname,
   }) : super(key: key);
 
   @override
@@ -40,9 +44,16 @@ class MessageBubble extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               if (!isUser && !isSystem)
-                Text(
-                  message.sender,
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.black54),
+                FutureBuilder<String>(
+                  future: getNickname(message.sender),
+                  initialData: nicknamesCache[message.sender],
+                  builder: (context, snapshot) {
+                    final displayName = snapshot.data ?? message.sender;
+                    return Text(
+                      displayName,
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.black54),
+                    );
+                  },
                 ),
               if (message.type == MessageType.text)
                 Text(message.content)

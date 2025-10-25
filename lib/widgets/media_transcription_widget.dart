@@ -49,7 +49,6 @@ class _MediaTranscriptionWidgetState extends State<MediaTranscriptionWidget> {
 
     if (widget.message.transcription != null) {
       _editableTranscription = TranscriptionData.fromJson(widget.message.transcription!.toJson());
-      _isTranscriptionPanelVisible = true;
     }
   }
 

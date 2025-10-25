@@ -11,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:LangBridge/models/chat.dart';
 import 'package:LangBridge/models/message.dart';
+import 'package:LangBridge/models/user_profile.dart';
 import 'package:LangBridge/repositories/auth_repository.dart';
 import 'package:LangBridge/repositories/chat_repository.dart';
 import 'package:LangBridge/widgets/message_bubble.dart';
@@ -51,6 +52,7 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _showCancelUI = false;
   late WebRTCManager _webRTCManager;
   String _peerName = '';
+  final Map<String, String> _userNicknamesCache = {};
 
   @override
   void initState() {
@@ -108,6 +110,32 @@ class _ChatScreenState extends State<ChatScreen> {
     widget.chatRepository.disconnectFromChat();
     _textController.dispose();
     super.dispose();
+  }
+
+  Future<String> _getNicknameForUser(String userId) async {
+    // Если никнейм уже в кэше, возвращаем его немедленно
+    if (_userNicknamesCache.containsKey(userId)) {
+      return _userNicknamesCache[userId]!;
+    }
+
+    // Если в кэше нет, делаем запрос
+    try {
+      final userProfile = await widget.chatRepository.getUserProfile(userId);
+      if (userProfile != null && userProfile.username.isNotEmpty) {
+        // Сохраняем в кэш и возвращаем
+        if (mounted) {
+          setState(() {
+            _userNicknamesCache[userId] = userProfile.username;
+          });
+        }
+        return userProfile.username;
+      }
+    } catch (e) {
+      print("Ошибка получения профиля для $userId: $e");
+    }
+
+    // В случае ошибки или если профиль не найден, возвращаем ID
+    return userId;
   }
 
   void _handleSignalingMessage(Map<String, dynamic>? data) async {
@@ -347,6 +375,8 @@ class _ChatScreenState extends State<ChatScreen> {
                       message: msg,
                       currentUserId: _currentUserId,
                       chatRepository: widget.chatRepository,
+                      nicknamesCache: _userNicknamesCache,
+                      getNickname: _getNicknameForUser,
                     );
                   },
                 );
