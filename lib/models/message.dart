@@ -55,7 +55,6 @@ class Message {
     if (type == MessageType.video || type == MessageType.audio) {
       try {
         final data = jsonDecode(content);
-
         final rawUrl = data['video_url'] ?? data['audio_url'];
         if (rawUrl != null && rawUrl.isNotEmpty) {
           final fullUrl = rawUrl.startsWith('http')
@@ -67,6 +66,9 @@ class Message {
           } else {
             audioUrl = fullUrl;
           }
+        } else {
+          if (type == MessageType.video) videoUrl = "";
+          if (type == MessageType.audio) audioUrl = "";
         }
         if (data['transcription'] != null) {
           transcription = TranscriptionData.fromJson(data['transcription']);
@@ -74,9 +76,10 @@ class Message {
         if (data['duration_ms'] != null) {
           duration = Duration(milliseconds: data['duration_ms']);
         }
-
       } catch (e) {
         print('Ошибка парсинга JSON для медиа-сообщения: $e');
+        if (type == MessageType.video) videoUrl = "";
+        if (type == MessageType.audio) audioUrl = "";
       }
     }
   }

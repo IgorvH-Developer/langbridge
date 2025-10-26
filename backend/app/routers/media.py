@@ -1,11 +1,13 @@
 import uuid
 import os
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, status
+from fastapi import APIRouter, UploadFile, File, Depends, Form, HTTPException, status
 from uuid import UUID as PyUUID
 from pydub import AudioSegment
 from sqlalchemy.orm import Session
 import json
-import stable_whisper # ИМПОРТИРУЕМ новую библиотеку
+import stable_whisper
+import subprocess
+from typing import List
 
 from .users import get_current_user
 from .. import database, models, schemas
@@ -23,11 +25,13 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 async def upload_video(
         chat_id: str,
         sender_id: str,
+        files: List[UploadFile] = File(...),
+        rotations: str = Form(...), # <<< ПРИНИМАЕМ JSON-СТРОКУ С ПОВОРОТАМИ
         reply_to_message_id: str | None = None,
-        file: UploadFile = File(...),
         db: Session = Depends(database.get_db)
 ):
-    logger.info(f"uploading video: {chat_id}, {sender_id}, {file.filename}")
+    logger.info(f"uploading {len(files)} video segments for chat: {chat_id}")
+
     try:
         chat_uuid = uuid.UUID(chat_id)
         sender_uuid = uuid.UUID(sender_id)
@@ -46,43 +50,126 @@ async def upload_video(
         except ValueError:
             logger.warning(f"Invalid reply_to_message_id format: {reply_to_message_id}")
 
-    file_extension = file.filename.split('.')[-1] if '.' in file.filename else 'mp4'
-    video_filename = f"{uuid.uuid4()}.{file_extension}"
-    video_path = os.path.join(UPLOAD_DIR, video_filename)
+    if not files:
+        raise HTTPException(status_code=400, detail="No video files uploaded.")
 
-    with open(video_path, "wb") as buffer:
-        buffer.write(await file.read())
-    logger.info(f"Video saved to {video_path}")
+    try:
+        rotation_values = json.loads(rotations)
+        if len(files) != len(rotation_values):
+            raise HTTPException(status_code=400, detail="Mismatch between number of files and rotations.")
 
-    # Важно: URL для клиента должен быть полным. Nginx настроен правильно,
-    # он будет раздавать файлы из /uploads/.
-    video_url = f"/uploads/{video_filename}"
+        processed_segment_paths = []
+        temp_files_to_clean = [] # Список всех временных файлов для очистки
 
-    # Это словарь, который мы сохраним в БД как JSON-строку
-    message_content_dict = {
-        "video_url": video_url,
-        "transcription": None
-    }
+        processed_segment_paths = []
+        temp_files_to_clean = [] # Список всех временных файлов для очистки
+
+        for i, (file, rotation) in enumerate(zip(files, rotation_values)):
+            # 1. Сохраняем оригинальный сегмент
+            original_segment_path = os.path.join(UPLOAD_DIR, f"temp_orig_{uuid.uuid4()}_{i}.mp4")
+            with open(original_segment_path, "wb") as buffer:
+                buffer.write(await file.read())
+            temp_files_to_clean.append(original_segment_path)
+
+            # 2. ВСЕГДА ПОЛНОСТЬЮ ПЕРЕКОДИРУЕМ каждый сегмент.
+            processed_segment_path = os.path.join(UPLOAD_DIR, f"temp_proc_{uuid.uuid4()}_{i}.mp4")
+
+            # Формируем базовую команду FFmpeg для перекодирования
+            ffmpeg_process_command = [
+                "ffmpeg",
+                "-i", original_segment_path,
+                "-y", # Перезаписывать, если файл существует
+            ]
+
+            # сбросить метатег, чтобы он не попал в финальный файл.
+            ffmpeg_process_command.extend([
+                "-metadata:s:v:0", "rotate=0"
+            ])
+
+            ffmpeg_process_command.append(processed_segment_path)
+
+            logger.info(f"Processing and re-encoding segment {i}: {' '.join(ffmpeg_process_command)}")
+            subprocess.run(ffmpeg_process_command, check=True)
+
+            processed_segment_paths.append(processed_segment_path)
+            temp_files_to_clean.append(processed_segment_path)
+
+        logger.info(f"Processed {len(processed_segment_paths)} segments.")
+
+        # 3. Создаем файл для FFmpeg со списком ОБРАБОТАННЫХ сегментов
+        concat_list_path = os.path.join(UPLOAD_DIR, f"concat_list_{uuid.uuid4()}.txt")
+
+        logger.info(f"Processed {len(processed_segment_paths)} segments.")
+
+        # 3. Создаем файл для FFmpeg со списком ОБРАБОТАННЫХ сегментов
+        concat_list_path = os.path.join(UPLOAD_DIR, f"concat_list_{uuid.uuid4()}.txt")
+        temp_files_to_clean.append(concat_list_path)
+        with open(concat_list_path, "w") as f:
+            for path in processed_segment_paths:
+                f.write(f"file '{path}'\n")
+
+        # 4. Вызываем FFmpeg для БЫСТРОЙ склейки БЕЗ перекодирования
+        final_video_filename = f"{uuid.uuid4()}.mp4"
+        final_video_path = os.path.join(UPLOAD_DIR, final_video_filename)
+        ffmpeg_concat_command = [
+            "ffmpeg",
+            "-f", "concat",
+            "-safe", "0",
+            "-i", concat_list_path,
+            "-bsf:a", "aac_adtstoasc",
+            "-y",
+            final_video_path
+        ]
+        logger.info(f"Concatenating segments: {' '.join(ffmpeg_concat_command)}")
+        subprocess.run(ffmpeg_concat_command, check=True)
+
+    except Exception as e:
+        logger.error(f"Error during video processing: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to process video segments.")
+    finally:
+        # 5. Очищаем ВСЕ временные файлы
+        if 'temp_files_to_clean' in locals():
+            for path in temp_files_to_clean:
+                if os.path.exists(path):
+                    os.remove(path)
+            logger.info("Cleaned up temporary segment files.")
+
+    video_url = f"/uploads/{final_video_filename}"
+    duration_ms = get_video_duration(final_video_path) # Предполагаем, что у вас есть такая функция
+    message_content_dict = {"video_url": video_url, "transcription": None, "duration_ms": duration_ms}
 
     db_message = models.Message(
         chat_id=chat_uuid,
         sender_id=sender_uuid,
-        content=json.dumps(message_content_dict),
-        type="video",
+        content=json.dumps(message_content_dict), # Контент должен быть строкой JSON
+        type="video", # Указываем тип
         reply_to_message_id=reply_to_uuid_obj
     )
     db.add(db_message)
     db.commit()
     db.refresh(db_message)
+    # Загружаем связанный объект, если он есть, для корректной сериализации
     db.refresh(db_message, ['reply_to_message'])
 
-    # Для WebSocket мы отправляем словарь, который валидируется через Pydantic
+    # 4. Готовим сообщение для отправки по WebSocket
     message_data_str = schemas.MessageResponse.model_validate(db_message).model_dump_json()
     message_to_broadcast = json.loads(message_data_str)
 
+    # 5. Отправляем сообщение всем в чате
     await manager.broadcast(chat_id, message_to_broadcast)
 
-    return {"filename": video_filename, "url": video_url, "message_id": str(db_message.id)}
+    return {"filename": final_video_filename, "url": video_url, "message_id": str(db_message.id)}
+
+def get_video_duration(video_path: str) -> int:
+    try:
+        result = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", video_path],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, text=True
+        )
+        return int(float(result.stdout) * 1000)
+    except Exception as e:
+        logger.error(f"Could not get video duration for {video_path}: {e}")
+        return 0
 
 @router.post("/upload/audio")
 async def upload_audio(

@@ -123,13 +123,14 @@ class ChatRepository {
   }
 
   Future<void> sendVideoMessage({
-    required String filePath,
+    // Меняем тип
+    required List<Map<String, dynamic>> segments,
     required String chatId,
     required String senderId,
     String? replyToMessageId,
   }) async {
     await _apiService.uploadVideo(
-      filePath: filePath,
+      segments: segments,
       chatId: chatId,
       senderId: senderId,
       replyToMessageId: replyToMessageId,

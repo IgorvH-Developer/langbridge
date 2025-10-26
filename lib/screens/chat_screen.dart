@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_sound/public/flutter_sound_recorder.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
@@ -11,12 +11,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:LangBridge/models/chat.dart';
 import 'package:LangBridge/models/message.dart';
-import 'package:LangBridge/models/user_profile.dart';
 import 'package:LangBridge/repositories/auth_repository.dart';
 import 'package:LangBridge/repositories/chat_repository.dart';
-import 'package:LangBridge/widgets/message_bubble.dart';
-import 'package:LangBridge/services/webrtc_manager.dart';
 import 'package:LangBridge/screens/call_screen.dart';
+import 'package:LangBridge/services/native_video_recorder.dart';
+import 'package:LangBridge/services/webrtc_manager.dart';
+import 'package:LangBridge/widgets/message_bubble.dart';
+import 'package:LangBridge/widgets/recording_overlay.dart';
 
 enum MediaRecordMode { audio, video }
 
@@ -55,14 +56,48 @@ class _ChatScreenState extends State<ChatScreen> {
   Message? _replyingToMessage;
   final ScrollController _scrollController = ScrollController();
   final Map<String, GlobalKey> _messageKeys = {};
+  StreamSubscription? _recordingResultSubscription;
 
   @override
   void initState() {
     super.initState();
+    NativeVideoRecorder.initialize();
+    _recordingResultSubscription = NativeVideoRecorder.onRecordingResult.listen((segments) {
+      if (segments != null && segments.isNotEmpty) {
+        widget.chatRepository.sendVideoMessage(
+          segments: segments,
+          chatId: widget.chat.id,
+          senderId: _currentUserId,
+          replyToMessageId: _replyingToMessage?.id,
+        );
+        if (_replyingToMessage != null) {
+          _cancelReply();
+        }
+      } else {
+        print("Нативная запись (слушатель) не вернула сегментов.");
+      }
+    });
     _initScreen();
     _loadCurrentUserAndConnect();
     _textController.addListener(() => _saveDraft(_textController.text));
     widget.chatRepository.messagesStream.addListener(_generateMessageKeys);
+  }
+
+  Future<bool> _performStartVideoRecording() async {
+    try {
+      await NativeVideoRecorder.startRecording();
+      print("Нативная запись видео начата.");
+      if (mounted) {
+        setState(() {
+          _isRecording = true;
+          _recordingDurationSeconds = 0;
+        });
+      }
+      return true;
+    } catch (e) {
+      print("Ошибка старта нативной записи видео: $e");
+      return false;
+    }
   }
 
   void _onSignalingMessage() {
@@ -107,6 +142,7 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void dispose() {
     print('[ChatScreen][${TimeOfDay.now()}] dispose: отписываемся от сигналов и очищаем ресурсы.');
+    _recordingResultSubscription?.cancel();
     widget.chatRepository.messagesStream.removeListener(_generateMessageKeys);
     _scrollController.dispose();
     widget.chatRepository.chatSocketService.signalingMessageNotifier.removeListener(_onSignalingMessage);
@@ -294,6 +330,39 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
+  Future<void> _toggleMediaMode() async {
+    // Если текущий режим - аудио, то мы хотим переключиться на видео
+    if (_mediaRecordMode == MediaRecordMode.audio) {
+      // Проверяем и запрашиваем разрешения
+      final cameraStatus = await Permission.camera.request();
+      final microphoneStatus = await Permission.microphone.request();
+
+      if (cameraStatus.isGranted && microphoneStatus.isGranted) {
+        // Если разрешения есть, меняем режим
+        if (mounted) {
+          setState(() {
+            _mediaRecordMode = MediaRecordMode.video;
+          });
+        }
+      } else {
+        // Если разрешений нет, показываем сообщение и не меняем режим
+        print("Разрешения для записи видео не предоставлены.");
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Для записи видео нужен доступ к камере и микрофону.")),
+          );
+        }
+      }
+    } else {
+      // Если текущий режим - видео, просто переключаемся обратно на аудио
+      if (mounted) {
+        setState(() {
+          _mediaRecordMode = MediaRecordMode.audio;
+        });
+      }
+    }
+  }
+
   Future<void> _togglePauseResume() async {
     if (_isPaused) {
       await _soundRecorder.resume();
@@ -305,8 +374,17 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
-
   Future<bool> _performStartRecording() async {
+    if (_mediaRecordMode == MediaRecordMode.audio) {
+      return await _performStartAudioRecording();
+    }
+    else if (_mediaRecordMode == MediaRecordMode.video) {
+      return await _performStartVideoRecording();
+    }
+    return false;
+  }
+
+  Future<bool> _performStartAudioRecording() async {
     try {
       final dir = await getApplicationDocumentsDirectory();
       _recordingPath = '${dir.path}/${DateTime.now().millisecondsSinceEpoch}.m4a';
@@ -331,21 +409,20 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _stopRecordingAndSend() async {
+    print("Stopping recording and sending for media type: $_mediaRecordMode");
     _recordingTimer?.cancel();
 
-    // 1. Останавливаем запись и получаем финальный путь.
-    final path = await _soundRecorder.stop();
-
-    // 2. Проверяем, есть ли что отправлять. Если да, отправляем НЕМЕДЛЕННО.
-    if (path != null && File(path).existsSync()) {
-      // Сначала выполняем сетевой запрос.
-      await _sendMedia(path, MessageType.audio);
-    } else {
-      print("Ошибка: путь к записанному файлу не был получен после остановки.");
+    if (_mediaRecordMode == MediaRecordMode.video) {
+      // Для видео просто отправляем команду. Результат обработает StreamSubscription.
+      await NativeVideoRecorder.stopRecording();
+    } else if (_mediaRecordMode == MediaRecordMode.audio) {
+      final path = await _soundRecorder.stop();
+      if (path != null && File(path).existsSync()) {
+        await _sendAudioMedia(path);
+      }
     }
 
-    // 3. И только ПОСЛЕ отправки сбрасываем состояние UI.
-    // Это гарантирует, что UI не перерисовывается в промежуточном состоянии.
+    // Общий сброс UI состояния в самом конце
     if (mounted) {
       setState(() {
         _isRecording = false;
@@ -357,28 +434,48 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-
   Future<void> _cancelRecording() async {
+    print("Cancelling recording for mode: $_mediaRecordMode");
     _recordingTimer?.cancel();
-    try {
-      await _soundRecorder.stop();
-    } catch (e) {
-      print("Error stopping recorder on cancel: $e");
-    }
 
-    if (_recordingPath != null && File(_recordingPath!).existsSync()) {
+    if (_mediaRecordMode == MediaRecordMode.video) {
+      await NativeVideoRecorder.cancelRecording();
+      print("Нативная команда отмены записи видео отправлена.");
+    } else {
       try {
-        await File(_recordingPath!).delete();
-      } catch (e) { print("Ошибка при удалении отмененного файла: $e"); }
+        final path = await _soundRecorder.stop();
+        final fileToDeletePath = path ?? _recordingPath;
+
+        if (fileToDeletePath != null && File(fileToDeletePath).existsSync()) {
+          try {
+            await File(fileToDeletePath).delete();
+            print("Отмененный аудиофайл удален: $fileToDeletePath");
+          } catch (e) {
+            print("Ошибка при удалении отмененного аудиофайла: $e");
+          }
+        }
+      } catch (e) {
+        print("Ошибка при остановке рекордера во время отмены: $e");
+        if (_recordingPath != null && File(_recordingPath!).existsSync()) {
+          try {
+            await File(_recordingPath!).delete();
+          } catch (delErr) {
+            print("Повторная попытка удаления также не удалась: $delErr");
+          }
+        }
+      }
     }
 
-    // Сбрасываем все состояния
-    setState(() {
-      _isRecording = false;
-      _isRecordingLocked = false;
-      _isPaused = false;
-      _dragOffset = 0;
-    });
+    // Общий сброс UI
+    if (mounted) {
+      setState(() {
+        _isRecording = false;
+        _isRecordingLocked = false;
+        _isPaused = false;
+        _dragOffset = 0;
+        _recordingPath = null;
+      });
+    }
     print("Запись отменена.");
   }
 
@@ -392,39 +489,61 @@ class _ChatScreenState extends State<ChatScreen> {
           IconButton(onPressed: () => _startCall(true), icon: const Icon(Icons.videocam), tooltip: 'Видеозвонок'),
         ],
       ),
-      body: Column(
+      body: Stack(
         children: [
-          Expanded(
-            child: ValueListenableBuilder<List<Message>>(
-              valueListenable: widget.chatRepository.messagesStream,
-              builder: (context, messages, child) {
-                if (messages.isEmpty) {
-                  return const Center(child: Text("Нет сообщений."));
-                }
-                return ListView.builder(
-                  controller: _scrollController,
-                  reverse: true,
-                  itemCount: messages.length,
-                  itemBuilder: (context, index) {
-                    final msg = messages[messages.length - 1 - index];
-                    return MessageBubble(
-                      key: _messageKeys[msg.id]!,
-                      message: msg,
-                      currentUserId: _currentUserId,
-                      chatRepository: widget.chatRepository,
-                      nicknamesCache: _userNicknamesCache,
-                      getNickname: _getNicknameForUser,
-                      onReply: _setReplyTo,
-                      onTapRepliedMessage: _scrollToMessage,
+          Column(
+            children: [
+              Expanded(
+                child: ValueListenableBuilder<List<Message>>(
+                  valueListenable: widget.chatRepository.messagesStream,
+                  builder: (context, messages, child) {
+                    if (messages.isEmpty) {
+                      return const Center(child: Text("Нет сообщений."));
+                    }
+                    return ListView.builder(
+                      controller: _scrollController,
+                      reverse: true,
+                      itemCount: messages.length,
+                      itemBuilder: (context, index) {
+                        final msg = messages[messages.length - 1 - index];
+                        return MessageBubble(
+                          key: _messageKeys[msg.id]!,
+                          message: msg,
+                          currentUserId: _currentUserId,
+                          chatRepository: widget.chatRepository,
+                          nicknamesCache: _userNicknamesCache,
+                          getNickname: _getNicknameForUser,
+                          onReply: _setReplyTo,
+                          onTapRepliedMessage: _scrollToMessage,
+                        );
+                      },
                     );
                   },
-                );
+                ),
+              ),
+              if (!_isRecording && _replyingToMessage != null)
+                _buildReplyPreview(),
+              _buildInputArea(),
+            ],
+          ),
+          if (_isRecording && _mediaRecordMode == MediaRecordMode.video)
+            RecordingOverlay(
+              recordingDurationSeconds: _recordingDurationSeconds,
+              isRecordingLocked: _isRecordingLocked,
+              isPaused: _isPaused,
+              onCancel: _cancelRecording,
+              onPauseResume: () {
+                print("Пауза/возобновление видео пока не реализовано");
+                // setState(() => _isPaused = !_isPaused);
+              },
+              onSend: _stopRecordingAndSend,
+              onToggleCamera: () {
+                NativeVideoRecorder.toggleCamera();
+              },
+              onToggleFlash: () {
+                NativeVideoRecorder.toggleFlash();
               },
             ),
-          ),
-          if (_replyingToMessage != null)
-            _buildReplyPreview(),
-          _buildInputArea(),
         ],
       ),
     );
@@ -480,6 +599,37 @@ class _ChatScreenState extends State<ChatScreen> {
     final bool showSendButton = _textController.text.trim().isNotEmpty;
     // Максимальная дистанция свайпа вверх для блокировки
     const double lockThreshold = 80.0;
+
+    if (_isRecordingLocked && _mediaRecordMode == MediaRecordMode.audio) {
+      final durationString = '${(_recordingDurationSeconds ~/ 60).toString().padLeft(2, '0')}:${(_recordingDurationSeconds % 60).toString().padLeft(2, '0')}';
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        color: Colors.white,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.delete_outline, color: Colors.red, size: 28),
+              onPressed: _cancelRecording,
+            ),
+            Text(durationString, style: const TextStyle(fontSize: 16)),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: Icon(_isPaused ? Icons.mic : Icons.pause, color: Colors.blue, size: 28),
+                  onPressed: _togglePauseResume,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.send, color: Colors.blue, size: 28),
+                  onPressed: _stopRecordingAndSend,
+                ),
+              ],
+            )
+          ],
+        ),
+      );
+    }
 
     return Container(
       color: Colors.white,
@@ -547,15 +697,12 @@ class _ChatScreenState extends State<ChatScreen> {
                   ],
                 )
               else
-              // 3. Главная кнопка для начала записи
                 GestureDetector(
-                  onTap: () => !_isRecording ? _toggleMediaRecordMode() : null,
+                  onTap: () => !_isRecording ? _toggleMediaMode() : null,
                   onLongPressStart: (details) {
                     if (_isRecording) return;
-                    print("Long press detected!");
-                    if (_mediaRecordMode == MediaRecordMode.audio) {
-                      _startRecording();
-                    }
+                    print("Long press detected for mode: $_mediaRecordMode");
+                    _startRecording();
                   },
                   onLongPressEnd: (details) {
                     if (!_isRecording || _isRecordingLocked) return;
@@ -702,24 +849,19 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  Future<void> _sendMedia(String filePath, MessageType type) async {
+  Future<void> _sendAudioMedia(String path) async {
+    if (_currentUserId.isEmpty || widget.chat.id.isEmpty) return;
+
     final replyId = _replyingToMessage?.id;
-    if (type == MessageType.audio) {
-      await widget.chatRepository.sendAudioMessage(
-        filePath: filePath,
-        chatId: widget.chat.id,
-        senderId: _currentUserId,
-        replyToMessageId: replyId,
-      );
-    } else {
-      await widget.chatRepository.sendVideoMessage(
-        filePath: filePath,
-        chatId: widget.chat.id,
-        senderId: _currentUserId,
-        replyToMessageId: replyId,
-      );
-    }
-    if(replyId != null) {
+
+    await widget.chatRepository.sendAudioMessage(
+      filePath: path,
+      chatId: widget.chat.id,
+      senderId: _currentUserId,
+      replyToMessageId: replyId,
+    );
+
+    if (replyId != null) {
       _cancelReply();
     }
   }

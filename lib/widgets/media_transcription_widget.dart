@@ -36,13 +36,14 @@ class _MediaTranscriptionWidgetState extends State<MediaTranscriptionWidget> {
   List<double> _waveformData = [];
 
   bool _isTranscriptionLoading = false;
+  Future<void>? _initializePlayerFuture;
 
   @override
   void initState() {
     super.initState();
-    if (widget.message.type == MessageType.video && widget.message.videoUrl != null) {
-      _initVideoPlayer();
-    } else if (widget.message.type == MessageType.audio && widget.message.audioUrl != null) {
+    if (widget.message.type == MessageType.video) {
+      _initializePlayerFuture = _initVideoPlayer();
+    } else if (widget.message.type == MessageType.audio && widget.message.audioUrl!.isNotEmpty) {
       _initAudioPlayer();
       _generateFakeWaveform();
     }
@@ -55,27 +56,27 @@ class _MediaTranscriptionWidgetState extends State<MediaTranscriptionWidget> {
   @override
   void didUpdateWidget(covariant MediaTranscriptionWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-
     if (widget.message.id != oldWidget.message.id) {
+      _disposePlayers();
       setState(() {
-        // СБРАСЫВАЕМ ВСЕ ЛОКАЛЬНОЕ СОСТОЯНИЕ, связанное с предыдущим сообщением
         _isPlaying = false;
-        _currentPosition = Duration.zero;
         _isTranscriptionPanelVisible = false;
-        _isTranscriptionLoading = false;
         _currentWordIndex = -1;
+        _currentPosition = Duration.zero;
+        _initializePlayerFuture = null;
+        _editableTranscription = null;
+        _isTranscriptionLoading = false;
 
-        _editableTranscription = widget.message.transcription != null
-            ? TranscriptionData.fromJson(widget.message.transcription!.toJson())
-            : null;
-
-        _isTranscriptionPanelVisible = widget.message.transcription != null;
+        if (widget.message.type == MessageType.video) {
+          _initializePlayerFuture = _initVideoPlayer();
+        } else if (widget.message.type == MessageType.audio && widget.message.audioUrl!.isNotEmpty) {
+          _initAudioPlayer();
+        }
+        if (widget.message.transcription != null) {
+          _editableTranscription = TranscriptionData.fromJson(widget.message.transcription!.toJson());
+        }
       });
-      if (widget.message.audioUrl != oldWidget.message.audioUrl && widget.message.audioUrl != null) {
-        _audioPlayer.setSourceUrl(widget.message.audioUrl!);
-      }
-    }
-    else if (widget.message.transcription != null && oldWidget.message.transcription == null) {
+    } else if (widget.message.transcription != null && oldWidget.message.transcription == null) {
       setState(() {
         _editableTranscription = TranscriptionData.fromJson(widget.message.transcription!.toJson());
         _isTranscriptionLoading = false;
@@ -83,35 +84,40 @@ class _MediaTranscriptionWidgetState extends State<MediaTranscriptionWidget> {
     }
   }
 
-
   void _generateFakeWaveform() {
     final random = Random();
     _waveformData = List<double>.generate(100, (i) => max(0.1, random.nextDouble()));
   }
 
-  void _initVideoPlayer() {
-    _videoController = VideoPlayerController.networkUrl(Uri.parse(widget.message.videoUrl!))
-      ..initialize().then((_) {
-        if (mounted) setState(() {});
-        _videoController!.addListener(_videoListener);
-      });
+  void _disposePlayers() {
+    _videoController?.removeListener(_videoListener);
+    _videoController?.dispose();
+    _videoController = null;
+    _audioPlayer.stop();
   }
 
   void _videoListener() {
-    if (!mounted) return;
+    if (!mounted || _videoController == null || !_videoController!.value.isInitialized) return;
     final value = _videoController!.value;
     final bool isPlaying = value.isPlaying;
     if (isPlaying != _isPlaying) {
-      setState(() {
-        _isPlaying = isPlaying;
-      });
+      setState(() { _isPlaying = isPlaying; });
     }
     _onPositionChanged(position: value.position);
-    if(mounted) {
-      setState(() {
-        _currentPosition = value.position;
-      });
+    if (mounted) {
+      setState(() { _currentPosition = value.position; });
     }
+  }
+
+  Future<void> _initVideoPlayer() async {
+    if (widget.message.videoUrl!.isEmpty) {
+      throw Exception("Video URL is empty");
+    }
+    _videoController?.dispose();
+    _videoController = VideoPlayerController.networkUrl(Uri.parse(widget.message.videoUrl!));
+    await _videoController!.initialize();
+    _videoController!.addListener(_videoListener);
+    if (mounted) setState(() {});
   }
 
   void _initAudioPlayer() {
@@ -141,8 +147,7 @@ class _MediaTranscriptionWidgetState extends State<MediaTranscriptionWidget> {
 
   @override
   void dispose() {
-    _videoController?.removeListener(_videoListener);
-    _videoController?.dispose();
+    _disposePlayers();
     _audioPlayer.dispose();
     super.dispose();
   }
@@ -150,7 +155,7 @@ class _MediaTranscriptionWidgetState extends State<MediaTranscriptionWidget> {
   Future<void> _playPause() async {
     if (widget.message.type == MessageType.video) {
       final controller = _videoController;
-      if (controller == null) return;
+      if (controller == null || !controller.value.isInitialized) return;
       controller.value.isPlaying ? await controller.pause() : await controller.play();
     } else if (widget.message.type == MessageType.audio) {
       if (_isPlaying) {
@@ -281,15 +286,19 @@ class _MediaTranscriptionWidgetState extends State<MediaTranscriptionWidget> {
 
   @override
   Widget build(BuildContext context) {
+    Widget mediaWidget;
+    if (widget.message.type == MessageType.video) {
+      mediaWidget = _buildVideoPlayer();
+    } else if (widget.message.type == MessageType.audio) {
+      mediaWidget = _buildAudioPlayer();
+    } else {
+      mediaWidget = const SizedBox.shrink();
+    }
+
     return Column(
-      crossAxisAlignment: widget.isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        if (widget.message.type == MessageType.video)
-          _buildVideoPlayer()
-        else if (widget.message.type == MessageType.audio)
-          _buildAudioPlayer()
-        else
-          const SizedBox.shrink(),
+        mediaWidget,
         if (_isTranscriptionPanelVisible) _buildTranscriptionPanel(),
       ],
     );
@@ -312,6 +321,7 @@ class _MediaTranscriptionWidgetState extends State<MediaTranscriptionWidget> {
         height: 50,
         padding: const EdgeInsets.symmetric(horizontal: 8.0),
         child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
             IconButton(
               icon: Icon(_isPlaying ? Icons.pause : Icons.play_arrow),
@@ -342,41 +352,103 @@ class _MediaTranscriptionWidgetState extends State<MediaTranscriptionWidget> {
   }
 
   Widget _buildVideoPlayer() {
-    return AspectRatio(
-      aspectRatio: _videoController?.value.aspectRatio ?? 16 / 9,
-      child: Stack(
-        alignment: Alignment.bottomCenter,
-        children: [
-          if (_videoController != null && _videoController!.value.isInitialized)
-            VideoPlayer(_videoController!)
-          else
-            Container(
-              color: Colors.black,
-              child: const Center(child: CircularProgressIndicator()),
+    return FutureBuilder(
+      future: _initializePlayerFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.done && _videoController != null && _videoController!.value.isInitialized) {
+          return ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: AspectRatio(
+              aspectRatio: _videoController!.value.aspectRatio,
+              child: Stack(
+                alignment: Alignment.bottomCenter,
+                children: [
+                  VideoPlayer(_videoController!),
+                  _buildControlsOverlay(),
+                ],
+              ),
             ),
-          _buildControlsOverlay(),
-        ],
-      ),
+          );
+        }
+        return AspectRatio(
+          aspectRatio: 16 / 9,
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.black,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Center(
+              child: snapshot.hasError
+                  ? const Icon(Icons.error_outline, color: Colors.red, size: 48)
+                  : const CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+            ),
+          ),
+        );
+      },
     );
   }
 
   Widget _buildControlsOverlay() {
-    return Container(
-      color: Colors.black.withOpacity(0.5),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          IconButton(
-            icon: Icon(_isPlaying ? Icons.pause : Icons.play_arrow),
-            color: Colors.white,
-            onPressed: _playPause,
-          ),
-          IconButton(
-            icon: const Icon(Icons.subtitles),
-            color: _isTranscriptionPanelVisible ? Colors.blueAccent : Colors.white,
-            onPressed: _toggleTranscriptionPanel,
-          ),
-        ],
+    if (_videoController == null || !_videoController!.value.isInitialized) {
+      return const SizedBox.shrink();
+    }
+
+    final totalDuration = _videoController!.value.duration;
+    final currentPosition = _videoController!.value.position;
+
+    // Функция для форматирования времени
+    String formatDuration(Duration d) {
+      final minutes = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+      final seconds = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+      return "$minutes:$seconds";
+    }
+
+    return Positioned(
+      bottom: 0,
+      left: 0,
+      right: 0,
+      child: Container(
+        color: Colors.black.withOpacity(0.5),
+        padding: const EdgeInsets.symmetric(horizontal: 8.0),
+        child: Row(
+          children: [
+            // Кнопка Play/Pause
+            IconButton(
+              icon: Icon(_isPlaying ? Icons.pause : Icons.play_arrow),
+              color: Colors.white,
+              onPressed: _playPause,
+            ),
+            // Текст текущего времени
+            Text(
+              formatDuration(currentPosition),
+              style: const TextStyle(color: Colors.white, fontSize: 12),
+            ),
+            // Слайдер, который занимает все оставшееся место
+            Expanded(
+              child: Slider(
+                value: currentPosition.inMilliseconds.toDouble().clamp(0.0, totalDuration.inMilliseconds.toDouble()),
+                min: 0.0,
+                max: totalDuration.inMilliseconds.toDouble(),
+                onChanged: (value) {
+                  _videoController!.seekTo(Duration(milliseconds: value.toInt()));
+                },
+                activeColor: Colors.white,
+                inactiveColor: Colors.white38,
+              ),
+            ),
+            // Текст общей длительности
+            Text(
+              formatDuration(totalDuration),
+              style: const TextStyle(color: Colors.white, fontSize: 12),
+            ),
+            // Кнопка субтитров
+            IconButton(
+              icon: const Icon(Icons.subtitles),
+              color: _isTranscriptionPanelVisible ? Colors.blueAccent : Colors.white,
+              onPressed: _toggleTranscriptionPanel,
+            ),
+          ],
+        ),
       ),
     );
   }

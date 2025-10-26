@@ -258,7 +258,7 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>?> uploadVideo({
-    required String filePath,
+    required List<Map<String, dynamic>> segments,
     required String chatId,
     required String senderId,
     String? replyToMessageId,
@@ -272,24 +272,26 @@ class ApiService {
         .replace(queryParameters: queryParams);
 
     final request = http.MultipartRequest('POST', url);
-
-    // Добавляем токен в заголовки
     final headers = await _getAuthHeaders();
+    headers.remove('Content-Type');
     request.headers.addAll(headers);
 
-    // Добавляем файл
-    request.files.add(await http.MultipartFile.fromPath(
-      'file', // Это имя поля должно совпадать с ожидаемым на бэкенде
-      filePath,
-      contentType: MediaType('video', 'mp4'), // Укажите правильный тип
-    ));
+    final List<String> rotations = [];
+    for (final segment in segments) {
+      final filePath = segment['path'] as String;
+      // Добавляем значение поворота в список
+      rotations.add((segment['rotation'] ?? 0).toString());
+      request.files.add(await http.MultipartFile.fromPath('files', filePath));
+    }
+
+    // Добавляем поле 'rotations' в запрос
+    request.fields['rotations'] = jsonEncode(rotations);
 
     try {
       final streamedResponse = await request.send();
-      final response = await http.Response.fromStream(streamedResponse); // Преобразуем ответ
+      final response = await http.Response.fromStream(streamedResponse);
 
       if (response.statusCode == 200) {
-        // Возвращаем тело ответа, которое содержит URL и транскрипцию
         return jsonDecode(utf8.decode(response.bodyBytes));
       } else {
         print('Video upload failed: ${response.statusCode}, Body: ${response.body}');

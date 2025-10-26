@@ -83,19 +83,70 @@ class MessageBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     final isUser = message.sender == currentUserId;
     final isSystem = message.sender == "system";
-    final bubble = Container( /* ... */ );
 
+    // 1. Собираем "внутренности" пузыря в отдельный виджет
+    final contentColumn = Column(
+      crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Для сообщений не от пользователя показываем его имя
+        if (!isUser && !isSystem)
+          FutureBuilder<String>(
+            future: getNickname(message.sender),
+            initialData: nicknamesCache[message.sender],
+            builder: (context, snapshot) {
+              final displayName = snapshot.data ?? message.sender;
+              return Text(
+                displayName,
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.black54),
+              );
+            },
+          ),
+
+        // Показываем рамку ответа
+        _buildRepliedMessage(context),
+
+        // Показываем основной контент
+        if (message.type == MessageType.video || message.type == MessageType.audio)
+          MediaTranscriptionWidget(
+            message: message,
+            chatRepository: chatRepository,
+            isUser: isUser,
+            key: ValueKey('${message.id}_transcription'),
+          )
+        else // Для текста
+          Text(message.content),
+
+        // Показываем время
+        const SizedBox(height: 4),
+        Text(
+          "${message.timestamp.hour.toString().padLeft(2, '0')}:${message.timestamp.minute.toString().padLeft(2, '0')}",
+          style: const TextStyle(fontSize: 10, color: Colors.black54),
+        ),
+      ],
+    );
+
+    // 2. Создаем сам пузырь
+    final bubble = Container(
+      constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
+      margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isSystem ? Colors.amber.shade100 : (isUser ? Colors.blue.shade100 : Colors.grey.shade300),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      // ВАЖНО: Если сообщение текстовое, оборачиваем в IntrinsicWidth.
+      // Если медиа - НЕ оборачиваем.
+      child: message.type == MessageType.text ? IntrinsicWidth(child: contentColumn) : contentColumn,
+    );
+
+    // 3. Собираем финальный виджет с Dismissible и выравниванием
     return Dismissible(
       key: ValueKey('dismiss_${message.id}'),
       direction: DismissDirection.endToStart,
-      dismissThresholds: const {
-        DismissDirection.endToStart: 0.2,
-      },
+      dismissThresholds: const {DismissDirection.endToStart: 0.2},
       confirmDismiss: (direction) async {
-        if (direction == DismissDirection.endToStart) {
-          onReply(message);
-          return false;
-        }
+        onReply(message);
         return false;
       },
       background: Container(
@@ -106,56 +157,7 @@ class MessageBubble extends StatelessWidget {
       ),
       child: Align(
         alignment: isSystem ? Alignment.center : (isUser ? Alignment.centerRight : Alignment.centerLeft),
-        child: Container(
-            constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
-            margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: isSystem
-                  ? Colors.amber.shade100
-                  : isUser
-                  ? Colors.blue.shade100
-                  : Colors.grey.shade300,
-              borderRadius: BorderRadius.circular(12),
-            ),
-          child: IntrinsicWidth(
-            child: Column(
-              crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (!isUser && !isSystem)
-                  FutureBuilder<String>(
-                    future: getNickname(message.sender),
-                    initialData: nicknamesCache[message.sender],
-                    builder: (context, snapshot) {
-                      final displayName = snapshot.data ?? message.sender;
-                      return Text(
-                        displayName,
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.black54),
-                      );
-                    },
-                  ),
-                _buildRepliedMessage(context),
-                if (message.type == MessageType.text)
-                  Text(message.content)
-                else if (message.type == MessageType.video || message.type == MessageType.audio)
-                  MediaTranscriptionWidget(
-                    message: message,
-                    chatRepository: chatRepository,
-                    isUser: isUser,
-                    key: ValueKey('${message.id}_transcription'),
-                  )
-                else
-                  const Text("Unsupported message type"),
-                const SizedBox(height: 4),
-                Text(
-                  "${message.timestamp.hour.toString().padLeft(2, '0')}:${message.timestamp.minute.toString().padLeft(2, '0')}",
-                  style: const TextStyle(fontSize: 10, color: Colors.black54),
-                ),
-              ],
-            ),
-          ),
-        ),
+        child: bubble,
       ),
     );
   }
