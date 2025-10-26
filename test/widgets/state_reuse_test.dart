@@ -105,6 +105,8 @@ void main() {
                       message: msg,
                       currentUserId: 'user-1',
                       chatRepository: realChatRepository,
+                      nicknamesCache: const {},
+                      getNickname: (userId) async => userId,
                     );
                   },
                 );

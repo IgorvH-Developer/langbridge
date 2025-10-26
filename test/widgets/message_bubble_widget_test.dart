@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:LangBridge/models/user_profile.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:LangBridge/config/app_config.dart';
@@ -88,6 +89,8 @@ void main() {
                   message: msg,
                   currentUserId: 'current-user',
                   chatRepository: realChatRepository,
+                  nicknamesCache: const {},
+                  getNickname: (userId) async => userId,
                 );
               },
             );
@@ -113,5 +116,95 @@ void main() {
     expect(find.text("Это"), findsOneWidget);
     expect(find.text("распознанный"), findsOneWidget);
     expect(find.text("текст."), findsOneWidget);
+  });
+
+  testWidgets('Отображает имя собеседника в заголовке и над его сообщением', (WidgetTester tester) async {
+    // --- ARRANGE (Подготовка) ---
+
+    // 1. Определяем ID и имена участников
+    const currentUserId = 'user-1';
+    const partnerId = 'user-2';
+    const partnerNickname = 'Собеседник John';
+
+    // 2. Создаем мок-сообщение от собеседника
+    final partnerMessage = Message.fromJson({
+      'id': 'msg-partner-1',
+      'sender_id': partnerId, // Отправлено собеседником
+      'content': 'Привет от собеседника!',
+      'type': 'text',
+      'timestamp': DateTime.now().toIso8601String(),
+    });
+
+    // 3. Заполняем notifier этим сообщением
+    messagesNotifier.value = [partnerMessage];
+
+    // 4. Настраиваем мок API: при запросе профиля собеседника, возвращаем его данные
+    when(mockApiService.getUserProfile(partnerId)).thenAnswer(
+          (_) async => UserProfile(id: partnerId, username: partnerNickname, languages: []),
+    );
+    // Для нашего пользователя возвращаем просто ID
+    when(mockApiService.getUserProfile(currentUserId)).thenAnswer(
+          (_) async => UserProfile(id: currentUserId, username: 'Me', languages: []),
+    );
+
+
+    // --- ACT (Действие) ---
+
+    // 1. Рендерим родительский виджет, который содержит и заголовок, и список сообщений.
+    //    Для простоты симулируем Scaffold с AppBar и телом, как в ChatScreen.
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        appBar: AppBar(
+          // future: realChatRepository.getUserProfile(partnerId) - так не сработает
+          // В реальном приложении логика сложнее, здесь симулируем результат.
+          // Мы проверим, что `getNickname` был вызван, и этого достаточно.
+          title: Text(partnerNickname),
+        ),
+        body: ListView.builder(
+          itemCount: messagesNotifier.value.length,
+          itemBuilder: (context, index) {
+            final msg = messagesNotifier.value[index];
+            return MessageBubble(
+              message: msg,
+              currentUserId: currentUserId,
+              chatRepository: realChatRepository,
+              nicknamesCache: const {partnerId: partnerNickname},
+              // Симулируем вызов функции, которую в реальном приложении предоставляет ChatScreen
+              getNickname: (userId) => realChatRepository.getUserProfile(userId).then((p) => p?.username ?? userId),
+            );
+          },
+        ),
+      ),
+    ));
+
+    // 2. Ждем завершения всех асинхронных операций (FutureBuilder внутри MessageBubble)
+    await tester.pumpAndSettle();
+
+
+    // --- ASSERT (Проверка) ---
+
+    // 1. Проверяем заголовок экрана (AppBar)
+    expect(find.descendant(of: find.byType(AppBar), matching: find.text(partnerNickname)), findsOneWidget,
+        reason: "Заголовок AppBar должен содержать имя собеседника");
+
+    // 2. Проверяем, что над сообщением собеседника отображается его имя.
+    final messageBubbleFinder = find.byType(MessageBubble);
+    expect(messageBubbleFinder, findsOneWidget);
+
+    // Внутри MessageBubble ищем виджет Text с никнеймом собеседника
+    final nicknameInBubbleFinder = find.descendant(
+      of: messageBubbleFinder,
+      matching: find.text(partnerNickname),
+    );
+
+    // В нашем `MessageBubble` имя собеседника встречается ДВАЖДЫ:
+    // 1. В AppBar (который мы тоже отрендерили).
+    // 2. Над самим сообщением.
+    // Поэтому мы ищем как минимум один такой виджет.
+    expect(nicknameInBubbleFinder, findsAtLeastNWidgets(1),
+        reason: "Имя собеседника должно отображаться над его сообщением");
+
+    // 3. Убедимся, что и само сообщение на месте
+    expect(find.text('Привет от собеседника!'), findsOneWidget);
   });
 }

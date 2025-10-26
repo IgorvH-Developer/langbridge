@@ -75,12 +75,9 @@ class _MediaTranscriptionWidgetState extends State<MediaTranscriptionWidget> {
         _audioPlayer.setSourceUrl(widget.message.audioUrl!);
       }
     }
-    else if (widget.message.transcription != oldWidget.message.transcription) {
+    else if (widget.message.transcription != null && oldWidget.message.transcription == null) {
       setState(() {
-        if (widget.message.transcription != null) {
-          _editableTranscription = TranscriptionData.fromJson(widget.message.transcription!.toJson());
-          _isTranscriptionPanelVisible = true;
-        }
+        _editableTranscription = TranscriptionData.fromJson(widget.message.transcription!.toJson());
         _isTranscriptionLoading = false;
       });
     }

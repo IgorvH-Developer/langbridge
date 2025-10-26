@@ -62,7 +62,7 @@ class MessageBubble extends StatelessWidget {
                   message: message,
                   chatRepository: chatRepository,
                   isUser: isUser,
-                  key: ValueKey(message.content)
+                  key: ValueKey('${message.id}_transcription'),
                 )
               else
                 const Text("Unsupported message type"),
