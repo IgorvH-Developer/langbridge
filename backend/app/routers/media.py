@@ -1,6 +1,7 @@
 import uuid
 import os
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, status
+from uuid import UUID as PyUUID
 from pydub import AudioSegment
 from sqlalchemy.orm import Session
 import json
@@ -22,6 +23,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 async def upload_video(
         chat_id: str,
         sender_id: str,
+        reply_to_message_id: str | None = None,
         file: UploadFile = File(...),
         db: Session = Depends(database.get_db)
 ):
@@ -36,6 +38,13 @@ async def upload_video(
     user_db = db.query(models.User).filter(models.User.id == sender_uuid).first()
     if not chat_db or not user_db:
         raise HTTPException(status_code=404, detail="Chat or User not found")
+
+    reply_to_uuid_obj = None
+    if reply_to_message_id:
+        try:
+            reply_to_uuid_obj = PyUUID(reply_to_message_id)
+        except ValueError:
+            logger.warning(f"Invalid reply_to_message_id format: {reply_to_message_id}")
 
     file_extension = file.filename.split('.')[-1] if '.' in file.filename else 'mp4'
     video_filename = f"{uuid.uuid4()}.{file_extension}"
@@ -58,22 +67,19 @@ async def upload_video(
     db_message = models.Message(
         chat_id=chat_uuid,
         sender_id=sender_uuid,
-        content=json.dumps(message_content_dict), # Сохраняем как строку
-        type="video"
+        content=json.dumps(message_content_dict),
+        type="video",
+        reply_to_message_id=reply_to_uuid_obj
     )
     db.add(db_message)
     db.commit()
     db.refresh(db_message)
+    db.refresh(db_message, ['reply_to_message'])
 
-    # Для WebSocket мы отправляем словарь, где `content` - это тоже словарь (не строка!)
-    message_to_broadcast = {
-        "id": str(db_message.id),
-        "chat_id": str(db_message.chat_id),
-        "sender_id": str(db_message.sender_id),
-        "content": message_content_dict,
-        "type": db_message.type,
-        "timestamp": db_message.timestamp.isoformat()
-    }
+    # Для WebSocket мы отправляем словарь, который валидируется через Pydantic
+    message_data_str = schemas.MessageResponse.model_validate(db_message).model_dump_json()
+    message_to_broadcast = json.loads(message_data_str)
+
     await manager.broadcast(chat_id, message_to_broadcast)
 
     return {"filename": video_filename, "url": video_url, "message_id": str(db_message.id)}
@@ -82,6 +88,7 @@ async def upload_video(
 async def upload_audio(
         chat_id: str,
         sender_id: str,
+        reply_to_message_id: str | None = None,
         file: UploadFile = File(...),
         db: Session = Depends(database.get_db)
 ):
@@ -96,6 +103,14 @@ async def upload_audio(
     user_db = db.query(models.User).filter(models.User.id == sender_uuid).first()
     if not chat_db or not user_db:
         raise HTTPException(status_code=404, detail="Chat or User not found")
+
+    reply_to_uuid_obj = None
+    if reply_to_message_id:
+        try:
+            reply_to_uuid_obj = PyUUID(reply_to_message_id)
+        except ValueError:
+            logger.warning(f"Invalid reply_to_message_id format: {reply_to_message_id}")
+
 
     file_extension = file.filename.split('.')[-1] if '.' in file.filename else 'm4a'
     audio_filename = f"{uuid.uuid4()}.{file_extension}"
@@ -126,20 +141,18 @@ async def upload_audio(
         chat_id=chat_uuid,
         sender_id=sender_uuid,
         content=json.dumps(message_content_dict),
-        type="audio"
+        type="audio",
+        reply_to_message_id=reply_to_uuid_obj
     )
     db.add(db_message)
     db.commit()
     db.refresh(db_message)
+    db.refresh(db_message, ['reply_to_message'])
 
-    message_to_broadcast = {
-        "id": str(db_message.id),
-        "chat_id": str(db_message.chat_id),
-        "sender_id": str(db_message.sender_id),
-        "content": message_content_dict,
-        "type": db_message.type,
-        "timestamp": db_message.timestamp.isoformat()
-    }
+    # Валидируем через Pydantic, чтобы получить правильную структуру JSON
+    message_data_str = schemas.MessageResponse.model_validate(db_message).model_dump_json()
+    message_to_broadcast = json.loads(message_data_str)
+
     await manager.broadcast(chat_id, message_to_broadcast)
 
     return {"filename": audio_filename, "url": audio_url, "message_id": str(db_message.id)}

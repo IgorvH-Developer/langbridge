@@ -38,7 +38,6 @@ class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _textController = TextEditingController();
   final ImagePicker _picker = ImagePicker();
   final AudioRecorder _soundRecorder = AudioRecorder();
-  // final FlutterSoundRecorder _soundRecorder = FlutterSoundRecorder();
   String _currentUserId = '';
   MediaRecordMode _mediaRecordMode = MediaRecordMode.audio;
   bool _isRecording = false;
@@ -53,11 +52,17 @@ class _ChatScreenState extends State<ChatScreen> {
   late WebRTCManager _webRTCManager;
   String _peerName = '';
   final Map<String, String> _userNicknamesCache = {};
+  Message? _replyingToMessage;
+  final ScrollController _scrollController = ScrollController();
+  final Map<String, GlobalKey> _messageKeys = {};
 
   @override
   void initState() {
     super.initState();
     _initScreen();
+    _loadCurrentUserAndConnect();
+    _textController.addListener(() => _saveDraft(_textController.text));
+    widget.chatRepository.messagesStream.addListener(_generateMessageKeys);
   }
 
   void _onSignalingMessage() {
@@ -70,7 +75,6 @@ class _ChatScreenState extends State<ChatScreen> {
     if (status != PermissionStatus.granted) {
       throw RecordingPermissionException('Microphone permission not granted');
     }
-    // await _soundRecorder.openRecorder();
   }
 
   Future<void> _initScreen() async {
@@ -103,6 +107,8 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void dispose() {
     print('[ChatScreen][${TimeOfDay.now()}] dispose: отписываемся от сигналов и очищаем ресурсы.');
+    widget.chatRepository.messagesStream.removeListener(_generateMessageKeys);
+    _scrollController.dispose();
     widget.chatRepository.chatSocketService.signalingMessageNotifier.removeListener(_onSignalingMessage);
     _webRTCManager.dispose();
     _soundRecorder.dispose();
@@ -110,6 +116,41 @@ class _ChatScreenState extends State<ChatScreen> {
     widget.chatRepository.disconnectFromChat();
     _textController.dispose();
     super.dispose();
+  }
+
+  void _generateMessageKeys() {
+    final messages = widget.chatRepository.messagesStream.value;
+    for (final message in messages) {
+      if (!_messageKeys.containsKey(message.id)) {
+        _messageKeys[message.id] = GlobalKey();
+      }
+    }
+    // Этот setState нужен, если ключи используются для чего-то, что требует перерисовки
+    // В данном случае, для прокрутки, он не обязателен, но оставим для надежности
+    if (mounted) setState(() {});
+  }
+
+  void _setReplyTo(Message message) {
+    setState(() {
+      _replyingToMessage = message;
+    });
+  }
+
+  void _cancelReply() {
+    setState(() {
+      _replyingToMessage = null;
+    });
+  }
+
+  void _scrollToMessage(String messageId) {
+    final key = _messageKeys[messageId];
+    if (key != null && key.currentContext != null) {
+      Scrollable.ensureVisible(
+        key.currentContext!,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    }
   }
 
   Future<String> _getNicknameForUser(String userId) async {
@@ -270,10 +311,6 @@ class _ChatScreenState extends State<ChatScreen> {
       final dir = await getApplicationDocumentsDirectory();
       _recordingPath = '${dir.path}/${DateTime.now().millisecondsSinceEpoch}.m4a';
       await _soundRecorder.start(const RecordConfig(), path: _recordingPath!);
-      // await _soundRecorder.start(
-      //   toFile: _recordingPath,
-      //   codec: Codec.aacMP4,
-      // );
 
       if (mounted) {
         setState(() {
@@ -294,7 +331,6 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _stopRecordingAndSend() async {
-    // if (!_soundRecorder.isRecording) return;
     _recordingTimer?.cancel();
 
     // 1. Останавливаем запись и получаем финальный путь.
@@ -323,7 +359,6 @@ class _ChatScreenState extends State<ChatScreen> {
 
 
   Future<void> _cancelRecording() async {
-    // if (!_soundRecorder.isRecording) return;
     _recordingTimer?.cancel();
     try {
       await _soundRecorder.stop();
@@ -367,23 +402,75 @@ class _ChatScreenState extends State<ChatScreen> {
                   return const Center(child: Text("Нет сообщений."));
                 }
                 return ListView.builder(
+                  controller: _scrollController,
                   reverse: true,
                   itemCount: messages.length,
                   itemBuilder: (context, index) {
                     final msg = messages[messages.length - 1 - index];
                     return MessageBubble(
+                      key: _messageKeys[msg.id]!,
                       message: msg,
                       currentUserId: _currentUserId,
                       chatRepository: widget.chatRepository,
                       nicknamesCache: _userNicknamesCache,
                       getNickname: _getNicknameForUser,
+                      onReply: _setReplyTo,
+                      onTapRepliedMessage: _scrollToMessage,
                     );
                   },
                 );
               },
             ),
           ),
+          if (_replyingToMessage != null)
+            _buildReplyPreview(),
           _buildInputArea(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReplyPreview() {
+    // Вспомогательная функция для получения текста-заглушки
+    String getPlaceholderText(Message message) {
+      switch (message.type) {
+        case MessageType.audio: return "Голосовое сообщение";
+        case MessageType.video: return "Видео";
+        case MessageType.image: return "Изображение";
+        default: return message.content;
+      }
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade200,
+        border: Border(left: BorderSide(color: Colors.blue, width: 4)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  // Тут можно использовать getNickname, если нужен никнейм
+                  _replyingToMessage!.sender == _currentUserId ? "Вы" : _peerName,
+                  style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  getPlaceholderText(_replyingToMessage!),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: _cancelReply,
+          ),
         ],
       ),
     );
@@ -616,18 +703,24 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _sendMedia(String filePath, MessageType type) async {
+    final replyId = _replyingToMessage?.id;
     if (type == MessageType.audio) {
       await widget.chatRepository.sendAudioMessage(
         filePath: filePath,
         chatId: widget.chat.id,
         senderId: _currentUserId,
+        replyToMessageId: replyId,
       );
     } else {
       await widget.chatRepository.sendVideoMessage(
         filePath: filePath,
         chatId: widget.chat.id,
         senderId: _currentUserId,
+        replyToMessageId: replyId,
       );
+    }
+    if(replyId != null) {
+      _cancelReply();
     }
   }
 
@@ -648,12 +741,16 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _sendMessage() {
     if (_textController.text.trim().isEmpty) return;
+
     widget.chatRepository.sendChatMessage(
       sender: _currentUserId,
       content: _textController.text.trim(),
       type: MessageType.text,
+      replyToMessageId: _replyingToMessage?.id,
     );
+
     _textController.clear();
     _saveDraft('');
+    _cancelReply();
   }
 }

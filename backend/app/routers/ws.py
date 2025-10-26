@@ -49,7 +49,6 @@ async def websocket_endpoint(
             data = json.loads(data_str)
             logger.debug(f"Received data from user '{user_id}' in chat '{chat_id_str}': {data}")
 
-            # --- НОВАЯ ЛОГИКА ДЛЯ ОБРАБОТКИ СИГНАЛОВ И СООБЩЕНИЙ ---
             message_type = data.get("type", "text")
             sender_id = data.get("sender_id")
 
@@ -74,29 +73,32 @@ async def websocket_endpoint(
                 await websocket.send_json({"error": "Content cannot be empty"})
                 continue
 
+            reply_to_id_str = data.get("reply_to_message_id")
+            reply_to_uuid_obj = None
+            if reply_to_id_str:
+                try:
+                    reply_to_uuid_obj = PyUUID(reply_to_id_str)
+                except (ValueError, TypeError):
+                    logger.warning(f"Invalid reply_to_message_id format: {reply_to_id_str}")
+
             db_message = models.Message(
                 chat_id=chat_uuid_obj,
                 sender_id=sender_uuid_obj,
                 content=content,
                 type=message_type,
-                timestamp=data.get("timestamp", datetime.now())
+                timestamp=data.get("timestamp", datetime.now()),
+                reply_to_message_id=reply_to_uuid_obj  # Сохраняем ID ответа
             )
             db.add(db_message)
             db.commit()
             db.refresh(db_message)
             logger.info(f"Message (ID: {db_message.id}) saved to DB for chat (UUID: {chat_uuid_obj})")
 
-            message_to_broadcast = {
-                "id": str(db_message.id),
-                "chat_id": str(db_message.chat_id),
-                "sender_id": str(db_message.sender_id),
-                "content": db_message.content,
-                "type": db_message.type,
-                "timestamp": db_message.timestamp.isoformat()
-            }
-            # Рассылаем всем в чате, включая отправителя
-            await manager.broadcast(chat_id_str, message_to_broadcast)
+            # Для рассылки нам нужно загрузить данные об отвеченном сообщении
+            db.refresh(db_message, ['reply_to_message'])
 
+            message_to_broadcast = MessageResponse.model_validate(db_message).model_dump_json()
+            await manager.broadcast(chat_id_str, json.loads(message_to_broadcast))
 
     except WebSocketDisconnect:
         logger.info(f"User {user_id} disconnected from chat: {chat_id_str}")

@@ -5,6 +5,32 @@ import 'transcription_data.dart';
 
 enum MessageType { text, image, video, audio }
 
+class RepliedMessageInfo {
+  final String id;
+  final String senderId;
+  final String content;
+  final MessageType type;
+
+  RepliedMessageInfo({
+    required this.id,
+    required this.senderId,
+    required this.content,
+    required this.type,
+  });
+
+  factory RepliedMessageInfo.fromJson(Map<String, dynamic> json) {
+    return RepliedMessageInfo(
+      id: json['id'],
+      senderId: json['sender_id'],
+      content: json['content'] ?? '',
+      type: MessageType.values.firstWhere(
+              (e) => e.toString().split('.').last == (json['type'] ?? 'text'),
+          orElse: () => MessageType.text
+      ),
+    );
+  }
+}
+
 class Message {
   final String id;
   final String sender;
@@ -15,6 +41,7 @@ class Message {
   String? audioUrl;
   TranscriptionData? transcription;
   Duration? duration;
+  final RepliedMessageInfo? repliedTo;
 
   Message({
     required this.id,
@@ -23,12 +50,12 @@ class Message {
     required this.type,
     required this.timestamp,
     this.duration,
+    this.repliedTo,
   }) {
     if (type == MessageType.video || type == MessageType.audio) {
       try {
         final data = jsonDecode(content);
 
-        // --- ОБНОВЛЕННАЯ ЛОГИКА ---
         final rawUrl = data['video_url'] ?? data['audio_url'];
         if (rawUrl != null && rawUrl.isNotEmpty) {
           final fullUrl = rawUrl.startsWith('http')
@@ -44,11 +71,9 @@ class Message {
         if (data['transcription'] != null) {
           transcription = TranscriptionData.fromJson(data['transcription']);
         }
-        // Парсим длительность
         if (data['duration_ms'] != null) {
           duration = Duration(milliseconds: data['duration_ms']);
         }
-        // --- КОНЕЦ ОБНОВЛЕННОЙ ЛОГИКИ ---
 
       } catch (e) {
         print('Ошибка парсинга JSON для медиа-сообщения: $e');
@@ -64,10 +89,9 @@ class Message {
     dynamic contentJson;
     String contentString;
 
-    // This is the core of the fix. We treat content differently based on message type.
     if (type == MessageType.text) {
       contentString = json['content'] as String;
-      contentJson = contentString; // for duration check, it will be a string, so it's safe.
+      contentJson = contentString;
     } else { // For media messages
       if (json['content'] is String) {
         contentString = json['content'];
@@ -89,16 +113,21 @@ class Message {
       messageDuration = Duration(milliseconds: contentJson['duration_ms']);
     }
 
+    RepliedMessageInfo? repliedMessageInfo;
+    if (json['reply_to_message'] != null) {
+      repliedMessageInfo = RepliedMessageInfo.fromJson(json['reply_to_message']);
+    }
+
     return Message(
       id: json['id'] ?? const Uuid().v4(),
       sender: json['sender_id'] ?? json['sender'] ?? 'unknown_sender',
-      content: contentString, // Pass the original or encoded string
+      content: contentString,
       type: type,
       timestamp: json['timestamp'] != null
           ? DateTime.parse(json['timestamp'])
           : DateTime.now(),
-      // Pass duration if we found it. Constructor might also find it, which is a bit redundant but not harmful.
       duration: messageDuration,
+      repliedTo: repliedMessageInfo,
     );
   }
 

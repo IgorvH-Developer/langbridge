@@ -261,12 +261,15 @@ class ApiService {
     required String filePath,
     required String chatId,
     required String senderId,
+    String? replyToMessageId,
   }) async {
-    final url = Uri.parse('$_apiBaseUrl/media/upload/video')
-        .replace(queryParameters: {
+    final queryParams = {
       'chat_id': chatId,
       'sender_id': senderId,
-    });
+      if (replyToMessageId != null) 'reply_to_message_id': replyToMessageId,
+    };
+    final url = Uri.parse('$_apiBaseUrl/media/upload/video')
+        .replace(queryParameters: queryParams);
 
     final request = http.MultipartRequest('POST', url);
 
@@ -302,12 +305,15 @@ class ApiService {
     required String filePath,
     required String chatId,
     required String senderId,
+    String? replyToMessageId,
   }) async {
-    final url = Uri.parse('$_apiBaseUrl/media/upload/audio')
-        .replace(queryParameters: {
+    final queryParams = {
       'chat_id': chatId,
       'sender_id': senderId,
-    });
+      if (replyToMessageId != null) 'reply_to_message_id': replyToMessageId,
+    };
+    final url = Uri.parse('$_apiBaseUrl/media/upload/audio')
+        .replace(queryParameters: queryParams);
 
     final request = http.MultipartRequest('POST', url);
     final headers = await _getAuthHeaders();

@@ -108,37 +108,45 @@ class ChatRepository {
     required String sender,
     required String content,
     MessageType type = MessageType.text,
+    String? replyToMessageId,
   }) {
-    chatSocketService.sendMessage(sender: sender, content: content, type: type);
+    chatSocketService.sendMessage(
+      sender: sender,
+      content: content,
+      type: type,
+      replyToMessageId: replyToMessageId,
+    );
   }
 
   void disconnectFromChat() {
     chatSocketService.disconnect();
   }
 
-  // Новый метод для отправки видео
   Future<void> sendVideoMessage({
     required String filePath,
     required String chatId,
     required String senderId,
+    String? replyToMessageId,
   }) async {
-    // Просто вызываем метод API, остальное сделает бэкенд
-    // (отправит WebSocket сообщение после обработки)
     await _apiService.uploadVideo(
       filePath: filePath,
       chatId: chatId,
       senderId: senderId,
+      replyToMessageId: replyToMessageId,
     );
   }
 
   Future<void> sendAudioMessage({
     required String filePath,
-    required String chatId,required String senderId,
+    required String chatId,
+    required String senderId,
+    String? replyToMessageId,
   }) async {
     await _apiService.uploadAudio(
       filePath: filePath,
       chatId: chatId,
       senderId: senderId,
+      replyToMessageId: replyToMessageId,
     );
   }
 

@@ -107,6 +107,8 @@ void main() {
                       chatRepository: realChatRepository,
                       nicknamesCache: const {},
                       getNickname: (userId) async => userId,
+                      onReply: (_) {},
+                      onTapRepliedMessage: (_) {},
                     );
                   },
                 );

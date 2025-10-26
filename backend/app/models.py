@@ -110,9 +110,10 @@ class Message(Base):
     content = Column(Text)
     type = Column(String, default="text")
     timestamp = Column(TIMESTAMP, server_default=func.now())
-
-    # --- ДОБАВЛЯЕМ НОВОЕ ПОЛЕ ---
     is_read = Column(Boolean, default=False, nullable=False)
+
+    reply_to_message_id = Column(GUID(), ForeignKey("messages.id"), nullable=True)
+    reply_to_message = relationship("Message", remote_side=[id], backref="replies")
 
     chat = relationship("Chat", back_populates="messages")
     sender = relationship("User", back_populates="messages_sent")

@@ -91,6 +91,8 @@ void main() {
                   chatRepository: realChatRepository,
                   nicknamesCache: const {},
                   getNickname: (userId) async => userId,
+                  onReply: (_) {},
+                  onTapRepliedMessage: (_) {},
                 );
               },
             );
@@ -155,9 +157,6 @@ void main() {
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
         appBar: AppBar(
-          // future: realChatRepository.getUserProfile(partnerId) - так не сработает
-          // В реальном приложении логика сложнее, здесь симулируем результат.
-          // Мы проверим, что `getNickname` был вызван, и этого достаточно.
           title: Text(partnerNickname),
         ),
         body: ListView.builder(
@@ -169,8 +168,9 @@ void main() {
               currentUserId: currentUserId,
               chatRepository: realChatRepository,
               nicknamesCache: const {partnerId: partnerNickname},
-              // Симулируем вызов функции, которую в реальном приложении предоставляет ChatScreen
               getNickname: (userId) => realChatRepository.getUserProfile(userId).then((p) => p?.username ?? userId),
+              onReply: (_) {},
+              onTapRepliedMessage: (_) {},
             );
           },
         ),
@@ -206,5 +206,151 @@ void main() {
 
     // 3. Убедимся, что и само сообщение на месте
     expect(find.text('Привет от собеседника!'), findsOneWidget);
+  });
+
+  group('Функционал ответов на сообщения', () {
+    // Подготовка базовых сообщений для тестов
+    final originalMessage = Message.fromJson({
+      'id': 'original-msg-1',
+      'sender_id': 'partner-id',
+      'content': 'Это оригинальное сообщение для ответа.',
+      'type': 'text',
+      'timestamp': DateTime.now().subtract(const Duration(minutes: 2)).toIso8601String(),
+    });
+
+    final audioMessage = Message.fromJson({
+      'id': 'original-audio-msg',
+      'sender_id': 'partner-id',
+      'content': jsonEncode({"audio_url": "/fake.m4a", "duration_ms": 3000}),
+      'type': 'audio',
+      'timestamp': DateTime.now().subtract(const Duration(minutes: 1)).toIso8601String(),
+    });
+
+    testWidgets('Свайп по сообщению собеседника вызывает колбэк onReply', (WidgetTester tester) async {
+      // ARRANGE
+      messagesNotifier.value = [originalMessage];
+      Message? repliedMessage;
+
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: ListView.builder(
+            itemCount: 1,
+            itemBuilder: (context, index) {
+              return MessageBubble(
+                message: originalMessage,
+                currentUserId: 'current-user-id', // Мы не собеседник
+                chatRepository: realChatRepository,
+                nicknamesCache: const {},
+                getNickname: (id) async => id,
+                onReply: (message) {
+                  repliedMessage = message; // Сохраняем сообщение, на которое отвечаем
+                },
+                onTapRepliedMessage: (_) {},
+              );
+            },
+          ),
+        ),
+      ));
+
+      // ACT: Симулируем свайп слева направо (endToStart)
+      await tester.drag(find.byType(MessageBubble), const Offset(-200.0, 0.0));
+      await tester.pumpAndSettle();
+
+      // ASSERT: Проверяем, что колбэк был вызван с правильным сообщением
+      expect(repliedMessage, isNotNull);
+      expect(repliedMessage!.id, originalMessage.id);
+    });
+
+    testWidgets('Отображает рамку ответа, если сообщение является ответом', (WidgetTester tester) async {
+      // ARRANGE: Создаем сообщение, которое является ответом на `originalMessage`
+      final replyMessage = Message.fromJson({
+        'id': 'reply-msg-1',
+        'sender_id': 'current-user-id',
+        'content': 'Это мой ответ.',
+        'type': 'text',
+        'timestamp': DateTime.now().toIso8601String(),
+        'reply_to_message': { // Вложенная информация об ответе
+          'id': 'original-msg-1',
+          'sender_id': 'partner-id',
+          'content': 'Это оригинальное сообщение для ответа.',
+          'type': 'text',
+        }
+      });
+      messagesNotifier.value = [replyMessage];
+
+      // ACT
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: ListView.builder(
+            itemCount: 1,
+            itemBuilder: (context, index) {
+              return MessageBubble(
+                message: replyMessage,
+                currentUserId: 'current-user-id',
+                chatRepository: realChatRepository,
+                nicknamesCache: const {'partner-id': 'John'},
+                getNickname: (id) async => 'John',
+                onReply: (_) {},
+                onTapRepliedMessage: (_) {},
+              );
+            },
+          ),
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      // ASSERT
+      // 1. Ищем имя автора оригинального сообщения
+      expect(find.text('John'), findsOneWidget);
+      // 2. Ищем текст оригинального сообщения
+      expect(find.text('Это оригинальное сообщение для ответа.'), findsOneWidget);
+      // 3. Ищем текст самого ответа
+      expect(find.text('Это мой ответ.'), findsOneWidget);
+    });
+
+    testWidgets('Отображает заглушку "Голосовое сообщение" для ответа на аудио', (WidgetTester tester) async {
+      // ARRANGE
+      final replyToAudioMessage = Message.fromJson({
+        'id': 'reply-to-audio-1',
+        'sender_id': 'current-user-id',
+        'content': 'Комментирую аудио',
+        'type': 'text',
+        'timestamp': DateTime.now().toIso8601String(),
+        'reply_to_message': {
+          'id': 'original-audio-msg',
+          'sender_id': 'partner-id',
+          'content': '', // У аудио нет текстового контента
+          'type': 'audio',
+        }
+      });
+      messagesNotifier.value = [replyToAudioMessage];
+
+      // ACT
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: ListView.builder(
+            itemCount: 1,
+            itemBuilder: (context, index) {
+              return MessageBubble(
+                message: replyToAudioMessage,
+                currentUserId: 'current-user-id',
+                chatRepository: realChatRepository,
+                nicknamesCache: const {'partner-id': 'Mike'},
+                getNickname: (id) async => 'Mike',
+                onReply: (_) {},
+                onTapRepliedMessage: (_) {},
+              );
+            },
+          ),
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      // ASSERT
+      expect(find.text('Mike'), findsOneWidget);
+      // Проверяем наличие заглушки вместо контента
+      expect(find.text('Голосовое сообщение'), findsOneWidget);
+      expect(find.text('Комментирую аудио'), findsOneWidget);
+    });
   });
 }

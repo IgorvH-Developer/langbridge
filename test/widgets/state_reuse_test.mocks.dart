@@ -107,11 +107,13 @@ class MockChatSocketService extends _i1.Mock implements _i3.ChatSocketService {
     required String? sender,
     required String? content,
     _i4.MessageType? type = _i4.MessageType.text,
+    String? replyToMessageId,
   }) => super.noSuchMethod(
     Invocation.method(#sendMessage, [], {
       #sender: sender,
       #content: content,
       #type: type,
+      #replyToMessageId: replyToMessageId,
     }),
     returnValueForMissingStub: null,
   );
@@ -245,12 +247,14 @@ class MockApiService extends _i1.Mock implements _i7.ApiService {
     required String? filePath,
     required String? chatId,
     required String? senderId,
+    String? replyToMessageId,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#uploadVideo, [], {
               #filePath: filePath,
               #chatId: chatId,
               #senderId: senderId,
+              #replyToMessageId: replyToMessageId,
             }),
             returnValue: _i6.Future<Map<String, dynamic>?>.value(),
           )
@@ -261,12 +265,14 @@ class MockApiService extends _i1.Mock implements _i7.ApiService {
     required String? filePath,
     required String? chatId,
     required String? senderId,
+    String? replyToMessageId,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#uploadAudio, [], {
               #filePath: filePath,
               #chatId: chatId,
               #senderId: senderId,
+              #replyToMessageId: replyToMessageId,
             }),
             returnValue: _i6.Future<Map<String, dynamic>?>.value(),
           )

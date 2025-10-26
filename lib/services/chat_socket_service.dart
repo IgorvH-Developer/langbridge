@@ -120,6 +120,7 @@ class ChatSocketService {
     required String sender, // ID текущего пользователя
     required String content,
     MessageType type = MessageType.text,
+    String? replyToMessageId,
   }) {
     if (_channel == null || currentChatId == null) { // Updated usage
       print("Невозможно отправить сообщение: нет активного соединения с чатом.");
@@ -152,6 +153,7 @@ class ChatSocketService {
       'sender_id': message.sender,
       'content': message.content,
       'type': message.type.toString().split('.').last,
+      'reply_to_message_id': replyToMessageId,
     });
     print("Отправка сообщения ($currentChatId): $messageJson"); // Updated usage
     _channel!.sink.add(messageJson);

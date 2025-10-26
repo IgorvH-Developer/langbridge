@@ -107,3 +107,30 @@ class ChatWithParticipantsResponse(BaseModel):
     timestamp: datetime
     participants: List[ParticipantResponse]
     model_config = ConfigDict(from_attributes=True)
+
+class RepliedMessageInfo(BaseModel):
+    id: PyUUID
+    sender_id: PyUUID
+    content: str
+    type: str
+    model_config = ConfigDict(from_attributes=True)
+
+
+class MessageResponse(BaseModel):
+    id: PyUUID
+    chat_id: PyUUID
+    sender_id: PyUUID
+    content: str
+    type: str
+    timestamp: datetime
+
+    reply_to_message: Optional[RepliedMessageInfo] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+    @field_validator('reply_to_message', mode='before')
+    @classmethod
+    def get_reply_message(cls, v):
+        if isinstance(v, models.Message):
+            return RepliedMessageInfo.model_validate(v)
+        return v
