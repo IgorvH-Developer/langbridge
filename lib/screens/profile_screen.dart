@@ -4,9 +4,10 @@ import 'package:LangBridge/screens/chat_screen.dart';
 import 'package:LangBridge/services/api_service.dart';
 import 'package:LangBridge/repositories/auth_repository.dart';
 import 'package:LangBridge/repositories/chat_repository.dart';
-import 'package:LangBridge/config/app_config.dart';
-import 'edit_profile_screen.dart';
-import 'login_screen.dart';
+import 'package:LangBridge/screens/settings_screen.dart';
+import 'package:LangBridge/l10n/app_localizations.dart';
+import 'package:LangBridge/screens/edit_profile_screen.dart';
+import 'package:LangBridge/screens/login_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   final String? userId;
@@ -114,14 +115,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void _editProfile() async {
     if (_profile == null) return;
 
-    // Переходим на экран редактирования и ждем результат (обновленный профиль)
     final result = await Navigator.of(context).push<UserProfile>(
       MaterialPageRoute(
         builder: (_) => EditProfileScreen(profile: _profile!),
       ),
     );
 
-    // Если мы получили обновленный профиль, обновляем состояние этого экрана
     if (result != null) {
       setState(() {
         _profile = result;
@@ -131,15 +130,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isMyProfile ? "Мой профиль" : (_profile?.username ?? "Профиль")),
+        title: Text(_isMyProfile ? l10n.settings /* Можно создать отдельную строку "Мой профиль" */ : (_profile?.username ?? "Профиль")),
         actions: [
+          if (_isMyProfile)
+            IconButton(
+              icon: const Icon(Icons.settings),
+              tooltip: l10n.settings,
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (context) => const SettingsScreen()),
+                );
+              },
+            ),
+
           if (_isMyProfile)
             IconButton(onPressed: _editProfile, icon: const Icon(Icons.edit), tooltip: 'Редактировать'),
           if (_isMyProfile)
             IconButton(onPressed: _logout, icon: const Icon(Icons.logout), tooltip: 'Выйти'),
-          // --- КНОПКА "НАПИСАТЬ СООБЩЕНИЕ" ---
           if (!_isMyProfile)
             IconButton(
               icon: const Icon(Icons.message),

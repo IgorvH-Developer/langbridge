@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:LangBridge/models/language.dart';
 import 'package:LangBridge/repositories/auth_repository.dart';
 import 'package:LangBridge/screens/main_screen.dart';
+import 'package:LangBridge/l10n/app_localizations.dart';
 
 class RegisterScreen extends StatefulWidget {
   final Language selectedLanguage;
@@ -37,18 +38,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
         // Если все прошло успешно, переходим на главный экран приложения
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (context) => const MainScreen()),
-              (Route<dynamic> route) => false, // Удаляем все предыдущие экраны
+              (Route<dynamic> route) => false,
         );
       } else {
-        setState(() { _error = "Ошибка регистрации. Возможно, имя пользователя уже занято."; });
+        // Используем локализованную строку для ошибки
+        setState(() { _error = AppLocalizations.of(context)!.registrationError; });
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+
     return Scaffold(
-      appBar: AppBar(title: Text('Регистрация (${widget.selectedLanguage.name})')),
+      appBar: AppBar(title: Text(l10n.registerWithLanguage(widget.selectedLanguage.name))),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Form(
@@ -57,22 +61,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(
-                'Вы выбрали "${widget.selectedLanguage.name}" как ваш родной язык.',
+                l10n.youHaveSelectedAsNative(widget.selectedLanguage.name),
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.titleMedium,
               ),
               const SizedBox(height: 20),
               TextFormField(
                 controller: _usernameController,
-                decoration: const InputDecoration(labelText: 'Имя пользователя', border: OutlineInputBorder()),
-                validator: (value) => (value == null || value.isEmpty) ? 'Введите имя пользователя' : null,
+                decoration: InputDecoration(labelText: l10n.username, border: const OutlineInputBorder()),
+                validator: (value) => (value == null || value.isEmpty) ? l10n.enterUsername : null,
               ),
               const SizedBox(height: 16),
               TextFormField(
                 controller: _passwordController,
-                decoration: const InputDecoration(labelText: 'Пароль', border: OutlineInputBorder()),
+                decoration: InputDecoration(labelText: l10n.password, border: const OutlineInputBorder()),
                 obscureText: true,
-                validator: (value) => (value == null || value.isEmpty) ? 'Введите пароль' : null,
+                validator: (value) => (value == null || value.isEmpty) ? l10n.enterPassword : null,
               ),
               const SizedBox(height: 20),
               if (_isLoading)
@@ -80,7 +84,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               else
                 ElevatedButton(
                   onPressed: _performRegister,
-                  child: const Text('Зарегистрироваться'),
+                  child: Text(l10n.registerButton),
                 ),
               if (_error != null) ...[
                 const SizedBox(height: 10),

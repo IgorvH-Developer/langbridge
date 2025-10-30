@@ -1,0 +1,21 @@
+{
+  "@@locale": "ru",
+  "appName": "LangBridge",
+  "registerWithLanguage": "Регистрация ({languageName})",  "youHaveSelectedAsNative": "Вы выбрали \"{languageName}\" как ваш родной язык.",
+  "username": "Имя пользователя",
+  "enterUsername": "Введите имя пользователя",
+  "password": "Пароль",
+  "enterPassword": "Введите пароль",
+  "registerButton": "Зарегистрироваться",
+  "registrationError": "Ошибка регистрации. Возможно, имя пользователя уже занято.",
+  "loginButton": "Войти",
+  "createAccountButton": "Создать аккаунт",
+  "loginError": "Неверное имя пользователя или пароль",
+  "selectNativeLanguage": "Выберите родной язык",
+  "failedToLoadLanguages": "Не удалось загрузить список языков.",
+  "noLanguagesFound": "Языки не найдены.",
+  "registrationSuccessful": "Регистрация успешна! Теперь вы можете войти.",
+  "settings": "Настройки",
+  "appLanguage": "Язык приложения",
+  "confirm": "Подтвердить"
+}

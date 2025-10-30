@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:LangBridge/repositories/auth_repository.dart';
 import 'package:LangBridge/screens/main_screen.dart';
 import 'package:LangBridge/screens/select_language_screen.dart';
+import 'package:LangBridge/l10n/app_localizations.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -18,12 +19,17 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
 
   Future<void> _performLogin() async {
+    if (!mounted) return;
+    final l10n = AppLocalizations.of(context)!;
+
     if (!_formKey.currentState!.validate()) return;
+
     setState(() => _isLoading = true);
     final success = await _authRepository.login(
       _usernameController.text,
       _passwordController.text,
     );
+
     if (mounted) {
       setState(() => _isLoading = false);
       if (success) {
@@ -32,7 +38,7 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Неверное имя пользователя или пароль')),
+          SnackBar(content: Text(l10n.loginError)),
         );
       }
     }
@@ -46,8 +52,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Вход')),
+      appBar: AppBar(title: Text(l10n.loginButton)),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Form(
@@ -57,15 +65,19 @@ class _LoginScreenState extends State<LoginScreen> {
             children: [
               TextFormField(
                 controller: _usernameController,
-                decoration: const InputDecoration(labelText: 'Имя пользователя', border: OutlineInputBorder()),
-                validator: (v) => v!.isEmpty ? 'Введите имя пользователя' : null,
+                decoration: InputDecoration(
+                    labelText: l10n.username,
+                    border: OutlineInputBorder()),
+                validator: (v) => v!.isEmpty ? l10n.enterUsername : null,
               ),
               const SizedBox(height: 16),
               TextFormField(
                 controller: _passwordController,
-                decoration: const InputDecoration(labelText: 'Пароль', border: OutlineInputBorder()),
+                decoration: InputDecoration(
+                    labelText: l10n.password,
+                    border: OutlineInputBorder()),
                 obscureText: true,
-                validator: (v) => v!.isEmpty ? 'Введите пароль' : null,
+                validator: (v) => v!.isEmpty ? l10n.enterPassword : null,
               ),
               const SizedBox(height: 20),
               if (_isLoading)
@@ -76,12 +88,12 @@ class _LoginScreenState extends State<LoginScreen> {
                   children: [
                     ElevatedButton(
                       onPressed: _performLogin,
-                      child: const Text('Войти'),
+                      child: Text(l10n.loginButton),
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 12),
                     OutlinedButton(
                       onPressed: _navigateToLanguageSelect,
-                      child: const Text('Создать аккаунт'),
+                      child: Text(l10n.createAccountButton),
                     ),
                   ],
                 )

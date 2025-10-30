@@ -1,0 +1,37 @@
+{
+  "@@locale": "en",
+  "appName": "LangBridge",
+  "registerWithLanguage": "Register ({languageName})",
+  "@registerWithLanguage": {
+    "description": "App bar title for registration screen",
+    "placeholders": {
+      "languageName": {
+        "type": "String"
+      }
+    }
+  },
+  "youHaveSelectedAsNative": "You have selected \"{languageName}\" as your native language.",
+  "@youHaveSelectedAsNative": {
+    "placeholders": {
+      "languageName": {
+        "type": "String"
+      }
+    }
+  },
+  "username": "Username",
+  "enterUsername": "Enter username",
+  "password": "Password",
+  "enterPassword": "Enter password",
+  "registerButton": "Register",
+  "registrationError": "Registration failed. Perhaps the username is already taken.",
+  "loginButton": "Login",
+  "createAccountButton": "Create Account",
+  "loginError": "Invalid username or password",
+  "selectNativeLanguage": "Select Native Language",
+  "failedToLoadLanguages": "Failed to load language list.",
+  "noLanguagesFound": "No languages found.",
+  "registrationSuccessful": "Registration successful! You can now log in.",
+  "settings": "Settings",
+  "appLanguage": "Application Language",
+  "confirm": "confirm"
+}
