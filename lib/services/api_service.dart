@@ -44,12 +44,16 @@ class ApiService {
     return null;
   }
 
-  Future<bool> register(String username, String password) async {
+  Future<bool> register(String username, String password, int nativeLanguageId) async { // <<< ДОБАВИТЬ АРГУМЕНТ
     final url = Uri.parse('$_apiBaseUrl/users/register');
     final response = await http.post(
       url,
       headers: {'Content-Type': 'application/json; charset=UTF-8'},
-      body: jsonEncode({'username': username, 'password': password}),
+      body: jsonEncode({
+        'username': username,
+        'password': password,
+        'native_language_id': nativeLanguageId
+      }),
     );
     return response.statusCode == 201;
   }

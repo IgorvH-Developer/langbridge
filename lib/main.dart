@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:LangBridge/screens/splash_screen.dart';
 
 import 'package:LangBridge/config/app_config.dart';
 import 'package:LangBridge/repositories/auth_repository.dart';
@@ -24,8 +24,6 @@ Future<void> main() async {
 class MyApp extends StatelessWidget {
   MyApp({super.key});
 
-  final _authRepository = AuthRepository();
-
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -34,18 +32,7 @@ class MyApp extends StatelessWidget {
         colorSchemeSeed: Colors.blue,
         useMaterial3: true,
       ),
-      home: FutureBuilder<bool>(
-        future: _authRepository.isLoggedIn(), // Используем метод репозитория
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Scaffold(body: Center(child: CircularProgressIndicator()));
-          }
-          if (snapshot.hasData && snapshot.data == true) {
-            return const MainScreen(); // Пользователь залогинен
-          }
-          return const LoginScreen(); // Пользователь не залогинен
-        },
-      ),
+      home: const SplashScreen(),
     );
   }
 }

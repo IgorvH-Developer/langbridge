@@ -32,20 +32,55 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         raise credentials_exception
     return user
 
-# --- Аутентификация и Регистрация (не меняются) ---
+# --- Аутентификация и Регистрация ---
 @router.post("/register", response_model=schemas.UserProfileResponse, status_code=status.HTTP_201_CREATED)
 async def register_user(user_data: schemas.UserCreate, db: Session = Depends(database.get_db)):
     logger.info(f"Attempting to register new user: '{user_data.username}'")
     db_user = db.query(models.User).filter(models.User.username == user_data.username).first()
     if db_user:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Username already registered")
+
+    # 1. Проверяем, существует ли язык
+    language = db.query(models.Language).filter(models.Language.id == user_data.native_language_id).first()
+    if not language:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid native language ID")
+
+    # 2. Создаем пользователя и сразу добавляем язык
     hashed_password = security.get_password_hash(user_data.password)
     new_user = models.User(username=user_data.username, hashed_password=hashed_password)
+
+    # 3. Создаем ассоциацию с родным языком
+    native_language_association = models.UserLanguageAssociation(
+        language_id=user_data.native_language_id,
+        level='native',
+        type='native'
+    )
+    new_user.language_associations.append(native_language_association)
+
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
+
+    # Перезагружаем пользователя с языками, чтобы вернуть полный профиль
+    db.refresh(new_user, ['language_associations'])
+
     logger.info(f"User '{new_user.username}' registered with ID: {new_user.id}")
-    return schemas.UserProfileResponse.model_validate(new_user)
+
+    # Валидация и возврат ответа
+    user_profile = schemas.UserProfileResponse.model_validate(new_user)
+    languages_data = []
+    for assoc in new_user.language_associations:
+        # Для свежесозданного пользователя язык может быть еще не загружен в сессию
+        db.refresh(assoc, ['language'])
+        languages_data.append(schemas.UserLanguageLink(
+            id=assoc.language.id,
+            name=assoc.language.name,
+            code=assoc.language.code,
+            level=assoc.level,
+            type=assoc.type
+        ))
+    user_profile.languages = languages_data
+    return user_profile
 
 @router.post("/token", response_model=schemas.Token)
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(database.get_db)):

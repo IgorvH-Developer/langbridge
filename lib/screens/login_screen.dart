@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import '../repositories/auth_repository.dart';
-import 'main_screen.dart';
+import 'package:LangBridge/repositories/auth_repository.dart';
+import 'package:LangBridge/screens/main_screen.dart';
+import 'package:LangBridge/screens/select_language_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -10,62 +11,82 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _authRepository = AuthRepository();
+  final _formKey = GlobalKey<FormState>();
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
-  bool _isLogin = true;
+  final _authRepository = AuthRepository();
   bool _isLoading = false;
 
-  void _submit() async {
+  Future<void> _performLogin() async {
+    if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
-    final username = _usernameController.text;
-    final password = _passwordController.text;
-
-    bool success = false;
-    if (_isLogin) {
-      success = await _authRepository.login(username, password);
-    } else {
-      // Логика регистрации и последующего входа
-      bool registered = await _authRepository.register(username, password);
-      if (registered) {
-        success = await _authRepository.login(username, password);
+    final success = await _authRepository.login(
+      _usernameController.text,
+      _passwordController.text,
+    );
+    if (mounted) {
+      setState(() => _isLoading = false);
+      if (success) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const MainScreen()),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Неверное имя пользователя или пароль')),
+        );
       }
     }
+  }
 
-    setState(() => _isLoading = false);
-
-    if (success && mounted) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const MainScreen()),
-      );
-    } else if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_isLogin ? 'Ошибка входа' : 'Ошибка регистрации')),
-      );
-    }
+  void _navigateToLanguageSelect() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const SelectLanguageScreen()),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(_isLogin ? 'Вход' : 'Регистрация')),
+      appBar: AppBar(title: const Text('Вход')),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            TextField(controller: _usernameController, decoration: const InputDecoration(labelText: 'Имя пользователя')),
-            TextField(controller: _passwordController, decoration: const InputDecoration(labelText: 'Пароль'), obscureText: true),
-            const SizedBox(height: 20),
-            if (_isLoading)
-              const CircularProgressIndicator()
-            else
-              ElevatedButton(onPressed: _submit, child: Text(_isLogin ? 'Войти' : 'Зарегистрироваться')),
-            TextButton(
-              onPressed: () => setState(() => _isLogin = !_isLogin),
-              child: Text(_isLogin ? 'Создать аккаунт' : 'Уже есть аккаунт'),
-            )
-          ],
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              TextFormField(
+                controller: _usernameController,
+                decoration: const InputDecoration(labelText: 'Имя пользователя', border: OutlineInputBorder()),
+                validator: (v) => v!.isEmpty ? 'Введите имя пользователя' : null,
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _passwordController,
+                decoration: const InputDecoration(labelText: 'Пароль', border: OutlineInputBorder()),
+                obscureText: true,
+                validator: (v) => v!.isEmpty ? 'Введите пароль' : null,
+              ),
+              const SizedBox(height: 20),
+              if (_isLoading)
+                const CircularProgressIndicator()
+              else
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    ElevatedButton(
+                      onPressed: _performLogin,
+                      child: const Text('Войти'),
+                    ),
+                    const SizedBox(height: 10),
+                    OutlinedButton(
+                      onPressed: _navigateToLanguageSelect,
+                      child: const Text('Создать аккаунт'),
+                    ),
+                  ],
+                )
+            ],
+          ),
         ),
       ),
     );

@@ -30,6 +30,7 @@ class LanguageUpdate(BaseModel):
 class UserCreate(BaseModel):
     username: str
     password: str
+    native_language_id: int
 
 class UserUpdate(BaseModel):
     full_name: Optional[str] = None

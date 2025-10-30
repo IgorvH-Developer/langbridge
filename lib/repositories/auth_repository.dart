@@ -40,6 +40,26 @@ class AuthRepository {
     return true;
   }
 
+  Future<bool> registerAndLogin({
+    required String username,
+    required String password,
+    required int nativeLanguageId,
+  }) async {
+    // 1. Пытаемся зарегистрироваться
+    final bool didRegister = await _apiService.register(username, password, nativeLanguageId);
+
+    if (didRegister) {
+      // 2. Если регистрация прошла успешно, сразу же пытаемся войти с теми же данными
+      print("Регистрация успешна. Выполняется автоматический вход...");
+      final bool didLogin = await login(username, password);
+      return didLogin;
+    } else {
+      // 3. Если регистрация не удалась, возвращаем false
+      print("Регистрация не удалась.");
+      return false;
+    }
+  }
+
   /// Получает сохраненный токен доступа.
   Future<String?> getToken() async {
     return await _storage.read(key: accessTokenKey, aOptions: _getAndroidOptions());
@@ -61,7 +81,7 @@ class AuthRepository {
     await _storage.deleteAll(aOptions: _getAndroidOptions());
   }
 
-  Future<bool> register(String username, String password) async {
-    return await _apiService.register(username, password);
+  Future<bool> register(String username, String password, int nativeLanguageId) async {
+    return await _apiService.register(username, password, nativeLanguageId);
   }
 }
