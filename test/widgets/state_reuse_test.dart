@@ -109,6 +109,7 @@ void main() {
                       getNickname: (userId) async => userId,
                       onReply: (_) {},
                       onTapRepliedMessage: (_) {},
+                      onTranslate: (_) {},
                     );
                   },
                 );

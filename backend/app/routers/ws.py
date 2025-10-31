@@ -7,6 +7,7 @@ import json
 from starlette.websockets import WebSocketState
 
 from .. import database, models
+from ..schemas import MessageResponse
 from ..websocket_manager import ConnectionManager
 from ..logger import logger # Предполагаем, что у вас есть logger
 
@@ -51,10 +52,10 @@ async def websocket_endpoint(
 
             message_type = data.get("type", "text")
             sender_id = data.get("sender_id")
+            client_message_id = data.get("client_message_id")
 
             # 1. Сигнальные сообщения WebRTC пересылаются напрямую другому участнику
             if message_type in ["call_offer", "call_answer", "ice_candidate", "call_end"]:
-                # Просто пересылаем данные другому/другим участникам чата
                 await manager.broadcast_to_others(chat_id_str, user_id, data)
                 logger.info(f"Broadcasted WebRTC signal '{message_type}' from {user_id} in chat {chat_id_str}")
                 continue # Переходим к следующему сообщению
@@ -87,18 +88,25 @@ async def websocket_endpoint(
                 content=content,
                 type=message_type,
                 timestamp=data.get("timestamp", datetime.now()),
-                reply_to_message_id=reply_to_uuid_obj  # Сохраняем ID ответа
+                reply_to_message_id=reply_to_uuid_obj
             )
             db.add(db_message)
             db.commit()
             db.refresh(db_message)
             logger.info(f"Message (ID: {db_message.id}) saved to DB for chat (UUID: {chat_uuid_obj})")
 
-            # Для рассылки нам нужно загрузить данные об отвеченном сообщении
             db.refresh(db_message, ['reply_to_message'])
 
-            message_to_broadcast = MessageResponse.model_validate(db_message).model_dump_json()
-            await manager.broadcast(chat_id_str, json.loads(message_to_broadcast))
+            # Преобразуем сообщение из БД в Pydantic-схему
+            response_model = MessageResponse.model_validate(db_message)
+
+            # Добавляем временный ID в модель ответа, если он был
+            if client_message_id:
+                response_model.client_message_id = client_message_id
+
+            # Сериализуем и отправляем
+            message_to_broadcast = json.loads(response_model.model_dump_json())
+            await manager.broadcast(chat_id_str, message_to_broadcast)
 
     except WebSocketDisconnect:
         logger.info(f"User {user_id} disconnected from chat: {chat_id_str}")

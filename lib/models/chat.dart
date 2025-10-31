@@ -56,7 +56,7 @@ class Chat {
           : null,
       participants: participantList.map((p) => ChatParticipant.fromJson(p)).toList(),
       lastMessage: json['last_message'] != null
-          ? Message.fromLastMessageJson(json['last_message'])
+          ? Message.fromJson(json['last_message'])
           : null,
       unreadCount: json['unread_count'] as int? ?? 0,
     );

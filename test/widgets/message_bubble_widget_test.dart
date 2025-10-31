@@ -93,6 +93,7 @@ void main() {
                   getNickname: (userId) async => userId,
                   onReply: (_) {},
                   onTapRepliedMessage: (_) {},
+                  onTranslate: (_) {},
                 );
               },
             );
@@ -171,6 +172,7 @@ void main() {
               getNickname: (userId) => realChatRepository.getUserProfile(userId).then((p) => p?.username ?? userId),
               onReply: (_) {},
               onTapRepliedMessage: (_) {},
+              onTranslate: (_) {},
             );
           },
         ),
@@ -246,6 +248,7 @@ void main() {
                   repliedMessage = message; // Сохраняем сообщение, на которое отвечаем
                 },
                 onTapRepliedMessage: (_) {},
+                onTranslate: (_) {},
               );
             },
           ),
@@ -292,6 +295,7 @@ void main() {
                 getNickname: (id) async => 'John',
                 onReply: (_) {},
                 onTapRepliedMessage: (_) {},
+                onTranslate: (_) {},
               );
             },
           ),
@@ -339,6 +343,7 @@ void main() {
                 getNickname: (id) async => 'Mike',
                 onReply: (_) {},
                 onTapRepliedMessage: (_) {},
+                onTranslate: (_) {},
               );
             },
           ),

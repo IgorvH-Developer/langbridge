@@ -7,6 +7,8 @@ const String _kMagicNullString = '__MAGIC_NULL__';
 
 enum MessageType { text, image, video, audio }
 
+enum MessageStatus { sent, sending, failed }
+
 class RepliedMessageInfo {
   final String id;
   final String senderId;
@@ -47,6 +49,9 @@ class Message {
   String? translatedContent;
   bool isTranslating;
 
+  final String? clientMessageId;
+  final MessageStatus status;
+
   Message({
     required this.id,
     required this.sender,
@@ -57,6 +62,8 @@ class Message {
     this.repliedTo,
     this.translatedContent,
     this.isTranslating = false,
+    this.clientMessageId,
+    this.status = MessageStatus.sent,
   }) {
     if (type == MessageType.video || type == MessageType.audio) {
       try {
@@ -132,24 +139,11 @@ class Message {
       sender: json['sender_id'] ?? json['sender'] ?? 'unknown_sender',
       content: contentString,
       type: type,
-      timestamp: json['timestamp'] != null
-          ? DateTime.parse(json['timestamp'])
-          : DateTime.now(),
+      timestamp: json['timestamp'] != null ? DateTime.parse(json['timestamp']) : DateTime.now(),
       duration: messageDuration,
       repliedTo: repliedMessageInfo,
-    );
-  }
-
-  factory Message.fromLastMessageJson(Map<String, dynamic> json) {
-    // Этот конструктор очень упрощен, так как нам нужны только content и timestamp
-    return Message(
-      id: '', // ID не важен для отображения в списке
-      sender: '', // Sender не важен
-      content: json['content'] ?? '',
-      type: MessageType.values.firstWhere(
-              (e) => e.toString().split('.').last == (json['type'] ?? 'text'),
-          orElse: () => MessageType.text),
-      timestamp: DateTime.parse(json['timestamp']),
+      clientMessageId: json['client_message_id'],
+      status: MessageStatus.sent,
     );
   }
 
@@ -175,11 +169,11 @@ class Message {
     DateTime? timestamp,
     Duration? duration,
     RepliedMessageInfo? repliedTo,
-    // Optional позволяет сбросить перевод на null
     String? translatedContent,
     bool? isTranslating,
+    String? clientMessageId,
+    MessageStatus? status,
   }) {
-    // Используем 'magic' значение, чтобы можно было сбросить перевод на null
     final newTranslatedContent = translatedContent ==_kMagicNullString ? null : (translatedContent ?? this.translatedContent);
 
     return Message(
@@ -192,6 +186,8 @@ class Message {
       repliedTo: repliedTo ?? this.repliedTo,
       translatedContent: newTranslatedContent,
       isTranslating: isTranslating ?? this.isTranslating,
+      clientMessageId: clientMessageId ?? this.clientMessageId,
+      status: status ?? this.status,
     );
   }
 }

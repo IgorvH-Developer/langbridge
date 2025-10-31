@@ -145,9 +145,17 @@ class MockApiService extends _i1.Mock implements _i7.ApiService {
           as _i6.Future<Map<String, String>?>);
 
   @override
-  _i6.Future<bool> register(String? username, String? password) =>
+  _i6.Future<bool> register(
+    String? username,
+    String? password,
+    int? nativeLanguageId,
+  ) =>
       (super.noSuchMethod(
-            Invocation.method(#register, [username, password]),
+            Invocation.method(#register, [
+              username,
+              password,
+              nativeLanguageId,
+            ]),
             returnValue: _i6.Future<bool>.value(false),
           )
           as _i6.Future<bool>);
@@ -244,14 +252,14 @@ class MockApiService extends _i1.Mock implements _i7.ApiService {
 
   @override
   _i6.Future<Map<String, dynamic>?> uploadVideo({
-    required String? filePath,
+    required List<Map<String, dynamic>>? segments,
     required String? chatId,
     required String? senderId,
     String? replyToMessageId,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#uploadVideo, [], {
-              #filePath: filePath,
+              #segments: segments,
               #chatId: chatId,
               #senderId: senderId,
               #replyToMessageId: replyToMessageId,
@@ -312,4 +320,12 @@ class MockApiService extends _i1.Mock implements _i7.ApiService {
             returnValue: _i6.Future<bool>.value(false),
           )
           as _i6.Future<bool>);
+
+  @override
+  _i6.Future<String?> translateText(String? text, String? targetLanguageCode) =>
+      (super.noSuchMethod(
+            Invocation.method(#translateText, [text, targetLanguageCode]),
+            returnValue: _i6.Future<String?>.value(),
+          )
+          as _i6.Future<String?>);
 }

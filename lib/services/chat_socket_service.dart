@@ -4,7 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:uuid/uuid.dart';
-import 'package:LangBridge/repositories/auth_repository.dart'; // <<< Добавить
+import 'package:LangBridge/repositories/auth_repository.dart';
 import 'webrtc_manager.dart';
 
 import 'package:LangBridge/config/app_config.dart';
@@ -54,15 +54,25 @@ class ChatSocketService {
           final Map<String, dynamic> data = jsonDecode(event);
           final type = data['type'] as String?;
 
-          // <<< НАЧАЛО ИЗМЕНЕНИЙ: Обработка сигнальных сообщений >>>
           if (type == 'call_offer' || type == 'call_answer' || type == 'ice_candidate' || type == 'call_end') {
             signalingMessageNotifier.value = data;
           } else {
-            final newMessage = Message.fromJson(data);
-            final updatedMessages = List<Message>.from(messagesNotifier.value)..add(newMessage);
-            messagesNotifier.value = updatedMessages;
-          }
+            final receivedMessage = Message.fromJson(data);
+            final currentMessages = List<Message>.from(messagesNotifier.value);
 
+            final int index = receivedMessage.clientMessageId != null
+                ? currentMessages.indexWhere((m) => m.clientMessageId == receivedMessage.clientMessageId)
+                : -1;
+
+            if (index != -1) {
+              print("Replacing optimistic message with server-confirmed message.");
+              currentMessages[index] = receivedMessage;
+            } else {
+              print("Adding new message from another user.");
+              currentMessages.add(receivedMessage);
+            }
+            messagesNotifier.value = currentMessages;
+          }
         } catch (e) {
           print("Ошибка декодирования сообщения от сокета ($chatId): $e");
           final errorMessage = Message(
@@ -117,12 +127,12 @@ class ChatSocketService {
   }
 
   void sendMessage({
-    required String sender, // ID текущего пользователя
+    required String sender,
     required String content,
     MessageType type = MessageType.text,
     String? replyToMessageId,
   }) {
-    if (_channel == null || currentChatId == null) { // Updated usage
+    if (_channel == null || currentChatId == null) {
       print("Невозможно отправить сообщение: нет активного соединения с чатом.");
       // Можно добавить сообщение об ошибке в UI через messagesNotifier
       final errorMessage = Message(
@@ -137,25 +147,29 @@ class ChatSocketService {
       return;
     }
 
-    final message = Message(
-      id: _uuid.v4(), // Клиент генерирует ID для оптимистичного обновления
+    final clientSideId = _uuid.v4();
+
+    final optimisticMessage = Message(
+      id: clientSideId,
+      clientMessageId: clientSideId,
       sender: sender,
       content: content,
       type: type,
       timestamp: DateTime.now(),
+      status: MessageStatus.sending,
     );
 
-    // Оптимистичное обновление: добавляем сообщение в UI сразу
-    final updatedMessages = List<Message>.from(messagesNotifier.value)..add(message);
+    final updatedMessages = List<Message>.from(messagesNotifier.value)..add(optimisticMessage);
     messagesNotifier.value = updatedMessages;
 
     final messageJson = jsonEncode({
-      'sender_id': message.sender,
-      'content': message.content,
-      'type': message.type.toString().split('.').last,
+      'client_message_id': clientSideId,
+      'sender_id': sender,
+      'content': content,
+      'type': type.toString().split('.').last,
       'reply_to_message_id': replyToMessageId,
     });
-    print("Отправка сообщения ($currentChatId): $messageJson"); // Updated usage
+    print("Отправка сообщения ($currentChatId): $messageJson");
     _channel!.sink.add(messageJson);
   }
 

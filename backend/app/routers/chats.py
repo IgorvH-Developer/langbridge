@@ -2,8 +2,8 @@ from typing import List
 from uuid import UUID as PyUUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import and_, select, func, desc
-from sqlalchemy.orm import Session, aliased, joinedload
+from sqlalchemy import and_, select, func, desc, join
+from sqlalchemy.orm import Session, aliased, joinedload, contains_eager
 
 from .users import get_current_user
 from .. import models, database, schemas
@@ -102,11 +102,21 @@ async def get_chat_messages(
     if not chat:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat not found")
 
-    messages = db.query(models.Message).options(
-        joinedload(models.Message.reply_to_message)
-    ).filter(
-        models.Message.chat_id == chat_uuid
-    ).order_by(models.Message.timestamp).all()
+    RepliedMessage = aliased(models.Message)
+
+    stmt = (
+        select(models.Message)
+        .outerjoin(RepliedMessage, models.Message.reply_to_message_id == RepliedMessage.id)
+        .options(
+            contains_eager(models.Message.reply_to_message.of_type(RepliedMessage))
+        )
+        .filter(models.Message.chat_id == chat_uuid)
+        .order_by(models.Message.timestamp)
+    )
+
+    messages = db.execute(stmt).scalars().all()
+
+    logger.info(f"Found {len(messages)} messages for chat {chat_uuid}")
     return messages
 
 

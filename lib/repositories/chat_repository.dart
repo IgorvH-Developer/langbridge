@@ -82,26 +82,33 @@ class ChatRepository {
     }
   }
 
-  // --- Методы для взаимодействия с ChatSocketService ---
   Future<void> connectToChat(Chat chat) async {
-    // Теперь chat.id должен быть валидным UUID, полученным от API
-    List<Message> initialMessages = chat.initialMessages ?? [];
 
-    // Запрашиваем историю сообщений с сервера
+    // 1. Немедленно подключаем сокет, чтобы не пропустить сообщения,
+    //    которые могут прийти во время загрузки истории.
+    //    Передаем пустой список, так как история будет загружена ниже.
+    chatSocketService.connect(chat.id, []);
+
+    // 2. Запрашиваем полную историю сообщений с сервера.
     final messagesData = await _apiService.getChatMessages(chat.id);
+
     if (messagesData != null) {
       try {
-        initialMessages = messagesData.map((data) => Message.fromJson(data)).toList();
-        print("Successfully fetched and parsed ${initialMessages.length} messages for chat ${chat.id}");
+        final newMessages = messagesData.map((data) => Message.fromJson(data)).toList();
+        print("Successfully fetched and parsed ${newMessages.length} messages for chat ${chat.id}");
+
+        // Обновляем главный ValueNotifier в ChatSocketService.
+        chatSocketService.messagesNotifier.value = newMessages;
+
       } catch (e) {
         print("Error parsing messages for chat ${chat.id}: $e");
-        // Оставляем initialMessages пустым или с тем, что было в chat.initialMessages
+        // В случае ошибки оставляем список пустым.
+        chatSocketService.messagesNotifier.value = [];
       }
     } else {
-      print("Failed to fetch messages for chat ${chat.id}, using local initialMessages (if any).");
+      print("Failed to fetch messages for chat ${chat.id}, setting message list to empty.");
+      chatSocketService.messagesNotifier.value = [];
     }
-
-    chatSocketService.connect(chat.id, initialMessages);
   }
 
   void sendChatMessage({
