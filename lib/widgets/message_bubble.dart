@@ -11,6 +11,7 @@ class MessageBubble extends StatelessWidget {
   final Future<String> Function(String userId) getNickname;
   final void Function(Message message) onReply;
   final void Function(String messageId) onTapRepliedMessage;
+  final void Function(Message message) onTranslate;
 
   const MessageBubble({
     Key? key,
@@ -21,6 +22,7 @@ class MessageBubble extends StatelessWidget {
     required this.getNickname,
     required this.onReply,
     required this.onTapRepliedMessage,
+    required this.onTranslate,
   }) : super(key: key);
 
   Widget _buildRepliedMessage(BuildContext context) {
@@ -83,6 +85,7 @@ class MessageBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     final isUser = message.sender == currentUserId;
     final isSystem = message.sender == "system";
+    final bool canBeTranslated = (message.type == MessageType.text && message.content.isNotEmpty) || (message.transcription != null);
 
     // 1. Собираем "внутренности" пузыря в отдельный виджет
     final contentColumn = Column(
@@ -107,15 +110,24 @@ class MessageBubble extends StatelessWidget {
         _buildRepliedMessage(context),
 
         // Показываем основной контент
-        if (message.type == MessageType.video || message.type == MessageType.audio)
-          MediaTranscriptionWidget(
-            message: message,
-            chatRepository: chatRepository,
-            isUser: isUser,
-            key: ValueKey('${message.id}_transcription'),
+        if (message.isTranslating)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8.0),
+            child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
           )
-        else // Для текста
-          Text(message.content),
+        else if (message.translatedContent != null)
+        // Показываем перевод и оригинал
+          Column(
+            crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+            children: [
+              Text(message.translatedContent!, style: const TextStyle(fontStyle: FontStyle.italic, color: Colors.black87)),
+              const Divider(height: 8),
+              _buildOriginalContent(isUser),
+            ],
+          )
+        else
+        // Показываем только оригинал
+          _buildOriginalContent(isUser),
 
         // Показываем время
         const SizedBox(height: 4),
@@ -127,17 +139,20 @@ class MessageBubble extends StatelessWidget {
     );
 
     // 2. Создаем сам пузырь
-    final bubble = Container(
-      constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
-      margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: isSystem ? Colors.amber.shade100 : (isUser ? Colors.blue.shade100 : Colors.grey.shade300),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      // ВАЖНО: Если сообщение текстовое, оборачиваем в IntrinsicWidth.
-      // Если медиа - НЕ оборачиваем.
-      child: message.type == MessageType.text ? IntrinsicWidth(child: contentColumn) : contentColumn,
+    final bubble = GestureDetector(
+        onDoubleTap: canBeTranslated ? () => onTranslate(message) : null,
+        child: Container(
+          constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
+          margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: isSystem ? Colors.amber.shade100 : (isUser ? Colors.blue.shade100 : Colors.grey.shade300),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          // ВАЖНО: Если сообщение текстовое, оборачиваем в IntrinsicWidth.
+          // Если медиа - НЕ оборачиваем.
+          child: message.type == MessageType.text ? IntrinsicWidth(child: contentColumn) : contentColumn,
+        )
     );
 
     // 3. Собираем финальный виджет с Dismissible и выравниванием
@@ -160,5 +175,18 @@ class MessageBubble extends StatelessWidget {
         child: bubble,
       ),
     );
+  }
+
+  Widget _buildOriginalContent(bool isUser) {
+    if (message.type == MessageType.video || message.type == MessageType.audio) {
+      return MediaTranscriptionWidget(
+        message: message,
+        chatRepository: chatRepository,
+        isUser: isUser,
+        key: ValueKey('${message.id}_transcription'),
+      );
+    } else { // Для текста
+      return Text(message.content);
+    }
   }
 }

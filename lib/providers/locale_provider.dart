@@ -1,31 +1,55 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class LocaleProvider with ChangeNotifier {
-  static const String _localeKey = 'app_locale';
-  Locale? _locale;
+  static const String _appLocaleKey = 'app_locale';
+  static const String _translationLocaleKey = 'translation_locale';
 
-  Locale? get locale => _locale;
+  Locale? _appLocale;
+  Locale? _translationLocale;
+
+  Locale? get appLocale => _appLocale;
+  Locale? get translationLocale => _translationLocale;
 
   LocaleProvider() {
-    _loadLocale();
+    _loadLocales();
   }
 
-  Future<void> _loadLocale() async {
+  Future<void> _loadLocales() async {
     final prefs = await SharedPreferences.getInstance();
-    final languageCode = prefs.getString(_localeKey);
-    if (languageCode != null) {
-      _locale = Locale(languageCode);
-      notifyListeners();
+    final appLangCode = prefs.getString(_appLocaleKey);
+    final translationLangCode = prefs.getString(_translationLocaleKey); // <<< Новое
+
+    if (appLangCode != null) {
+      _appLocale = Locale(appLangCode);
     }
+    if (translationLangCode != null) { // <<< Новое
+      _translationLocale = Locale(translationLangCode);
+    }
+    notifyListeners();
   }
 
-  Future<void> setLocale(Locale newLocale) async {
-    if (_locale == newLocale) return;
+  Future<void> setAppLocale(Locale newLocale) async {
+    if (_appLocale == newLocale) return;
 
-    _locale = newLocale;
+    _appLocale = newLocale;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_localeKey, newLocale.languageCode);
+    await prefs.setString(_appLocaleKey, newLocale.languageCode);
+    notifyListeners();
+  }
+
+  Future<void> setTranslationLocale(Locale? newLocale) async {
+    if (_translationLocale == newLocale) return;
+
+    _translationLocale = newLocale;
+    final prefs = await SharedPreferences.getInstance();
+    if (newLocale == null) {
+      await prefs.remove(_translationLocaleKey);
+    } else {
+      await prefs.setString(_translationLocaleKey, newLocale.languageCode);
+    }
     notifyListeners();
   }
 }

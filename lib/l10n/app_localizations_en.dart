@@ -70,4 +70,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get confirm => 'confirm';
+
+  @override
+  String get translationLanguage => 'Translation Language';
+
+  @override
+  String get systemDefault => 'System Default';
+
+  @override
+  String get translationError => 'Translation failed';
 }

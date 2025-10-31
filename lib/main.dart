@@ -30,7 +30,7 @@ class MyApp extends StatelessWidget {
     final localeProvider = Provider.of<LocaleProvider>(context);
 
     return MaterialApp(
-      locale: localeProvider.locale,
+      locale: localeProvider.appLocale,
       onGenerateTitle: (context) => AppLocalizations.of(context)!.appName,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,

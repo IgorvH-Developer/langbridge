@@ -3,6 +3,8 @@ import 'package:uuid/uuid.dart';
 import 'package:LangBridge/config/app_config.dart';
 import 'transcription_data.dart';
 
+const String _kMagicNullString = '__MAGIC_NULL__';
+
 enum MessageType { text, image, video, audio }
 
 class RepliedMessageInfo {
@@ -42,6 +44,8 @@ class Message {
   TranscriptionData? transcription;
   Duration? duration;
   final RepliedMessageInfo? repliedTo;
+  String? translatedContent;
+  bool isTranslating;
 
   Message({
     required this.id,
@@ -51,6 +55,8 @@ class Message {
     required this.timestamp,
     this.duration,
     this.repliedTo,
+    this.translatedContent,
+    this.isTranslating = false,
   }) {
     if (type == MessageType.video || type == MessageType.audio) {
       try {
@@ -147,7 +153,6 @@ class Message {
     );
   }
 
-  // Метод для обновления сообщения новой транскрипцией
   Message withTranscription(TranscriptionData newTranscription) {
     final Map<String, dynamic> contentData = jsonDecode(content);
     contentData['transcription'] = newTranscription.toJson();
@@ -158,7 +163,35 @@ class Message {
       content: jsonEncode(contentData),
       type: type,
       timestamp: timestamp,
-      duration: duration, // <--- НЕ ЗАБЫВАЕМ ПЕРЕДАВАТЬ ДЛИТЕЛЬНОСТЬ ПРИ КОПИРОВАНИИ
+      duration: duration,
+    );
+  }
+
+  Message copyWith({
+    String? id,
+    String? sender,
+    String? content,
+    MessageType? type,
+    DateTime? timestamp,
+    Duration? duration,
+    RepliedMessageInfo? repliedTo,
+    // Optional позволяет сбросить перевод на null
+    String? translatedContent,
+    bool? isTranslating,
+  }) {
+    // Используем 'magic' значение, чтобы можно было сбросить перевод на null
+    final newTranslatedContent = translatedContent ==_kMagicNullString ? null : (translatedContent ?? this.translatedContent);
+
+    return Message(
+      id: id ?? this.id,
+      sender: sender ?? this.sender,
+      content: content ?? this.content,
+      type: type ?? this.type,
+      timestamp: timestamp ?? this.timestamp,
+      duration: duration ?? this.duration,
+      repliedTo: repliedTo ?? this.repliedTo,
+      translatedContent: newTranslatedContent,
+      isTranslating: isTranslating ?? this.isTranslating,
     );
   }
 }

@@ -33,5 +33,8 @@
   "registrationSuccessful": "Registration successful! You can now log in.",
   "settings": "Settings",
   "appLanguage": "Application Language",
-  "confirm": "confirm"
+  "confirm": "confirm",
+  "translationLanguage": "Translation Language",
+  "systemDefault": "System Default",
+  "translationError": "Translation failed"
 }

@@ -211,6 +211,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'confirm'**
   String get confirm;
+
+  /// No description provided for @translationLanguage.
+  ///
+  /// In en, this message translates to:
+  /// **'Translation Language'**
+  String get translationLanguage;
+
+  /// No description provided for @systemDefault.
+  ///
+  /// In en, this message translates to:
+  /// **'System Default'**
+  String get systemDefault;
+
+  /// No description provided for @translationError.
+  ///
+  /// In en, this message translates to:
+  /// **'Translation failed'**
+  String get translationError;
 }
 
 class _AppLocalizationsDelegate

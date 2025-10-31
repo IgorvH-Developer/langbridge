@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:provider/provider.dart';
 
 import 'package:LangBridge/models/chat.dart';
 import 'package:LangBridge/models/message.dart';
@@ -18,6 +19,11 @@ import 'package:LangBridge/services/native_video_recorder.dart';
 import 'package:LangBridge/services/webrtc_manager.dart';
 import 'package:LangBridge/widgets/message_bubble.dart';
 import 'package:LangBridge/widgets/recording_overlay.dart';
+import 'package:LangBridge/providers/locale_provider.dart';
+import 'package:LangBridge/services/api_service.dart';
+import 'package:LangBridge/l10n/app_localizations.dart';
+
+const String _kMagicNullString = '__MAGIC_NULL__';
 
 enum MediaRecordMode { audio, video }
 
@@ -36,6 +42,7 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> {
+  final ApiService _apiService = ApiService();
   final TextEditingController _textController = TextEditingController();
   final ImagePicker _picker = ImagePicker();
   final AudioRecorder _soundRecorder = AudioRecorder();
@@ -81,6 +88,56 @@ class _ChatScreenState extends State<ChatScreen> {
     _loadCurrentUserAndConnect();
     _textController.addListener(() => _saveDraft(_textController.text));
     widget.chatRepository.messagesStream.addListener(_generateMessageKeys);
+  }
+
+  Future<void> _translateMessage(Message message) async {
+    // 1. Проверяем, есть ли у сообщения уже перевод или оно в процессе
+    final currentMessage = widget.chatRepository.messagesStream.value.firstWhere((m) => m.id == message.id);
+    if (currentMessage.translatedContent != null) {
+      // Если перевод есть, двойной тап его убирает
+      _updateMessageState(message.id, isTranslating: false, translatedContent: _kMagicNullString);
+      return;
+    }
+    if (currentMessage.isTranslating) return; // Уже переводим
+
+    // 2. Получаем язык для перевода из провайдера
+    final localeProvider = Provider.of<LocaleProvider>(context, listen: false);
+    final targetLocale = localeProvider.translationLocale ?? Localizations.localeOf(context);
+
+    // 3. Обновляем UI, чтобы показать индикатор загрузки
+    _updateMessageState(message.id, isTranslating: true);
+
+    // 4. Выполняем API запрос
+    final originalContent = message.type == MessageType.text ? message.content : message.transcription?.fullText;
+    if (originalContent == null || originalContent.isEmpty) {
+      _updateMessageState(message.id, isTranslating: false);
+      return;
+    }
+
+    final translated = await _apiService.translateText(originalContent, targetLocale.languageCode);
+
+    // 5. Обновляем UI с результатом
+    if (mounted) {
+      _updateMessageState(
+        message.id,
+        isTranslating: false,
+        translatedContent: translated ?? AppLocalizations.of(context)!.translationError,
+      );
+    }
+  }
+
+  void _updateMessageState(String messageId, {bool? isTranslating, String? translatedContent}) {
+    final currentMessages = List<Message>.from(widget.chatRepository.messagesStream.value);
+    final messageIndex = currentMessages.indexWhere((m) => m.id == messageId);
+
+    if (messageIndex != -1) {
+      currentMessages[messageIndex] = currentMessages[messageIndex].copyWith(
+        isTranslating: isTranslating,
+        translatedContent: translatedContent,
+      );
+      // Обновляем ValueNotifier, чтобы UI перерисовался
+      widget.chatRepository.messagesStream.value = currentMessages;
+    }
   }
 
   Future<bool> _performStartVideoRecording() async {
@@ -515,6 +572,7 @@ class _ChatScreenState extends State<ChatScreen> {
                           getNickname: _getNicknameForUser,
                           onReply: _setReplyTo,
                           onTapRepliedMessage: _scrollToMessage,
+                          onTranslate: _translateMessage,
                         );
                       },
                     );

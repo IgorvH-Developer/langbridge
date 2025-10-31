@@ -70,4 +70,13 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get confirm => 'Подтвердить';
+
+  @override
+  String get translationLanguage => 'Язык перевода';
+
+  @override
+  String get systemDefault => 'Язык системы';
+
+  @override
+  String get translationError => 'Ошибка перевода';
 }

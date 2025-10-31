@@ -11,7 +11,21 @@ class SettingsScreen extends StatelessWidget {
     final l10n = AppLocalizations.of(context)!;
     final localeProvider = Provider.of<LocaleProvider>(context);
 
-    final currentLocaleCode = localeProvider.locale?.languageCode ?? Localizations.localeOf(context).languageCode;
+    final currentAppLocaleCode = localeProvider.appLocale?.languageCode ?? Localizations.localeOf(context).languageCode;
+    final currentTranslationLocaleCode = localeProvider.translationLocale?.languageCode;
+
+    final List<DropdownMenuItem<String>> translationItems = [
+      DropdownMenuItem<String>(
+        value: null,
+        child: Text(l10n.systemDefault),
+      ),
+      ...AppLocalizations.supportedLocales.map((locale) {
+        return DropdownMenuItem<String>(
+          value: locale.languageCode,
+          child: Text(_getLanguageName(locale.languageCode)),
+        );
+      }).toList(),
+    ];
 
     return Scaffold(
       appBar: AppBar(
@@ -22,20 +36,30 @@ class SettingsScreen extends StatelessWidget {
           ListTile(
             title: Text(l10n.appLanguage),
             trailing: DropdownButton<String>(
-              value: currentLocaleCode,
+              value: currentAppLocaleCode,
               onChanged: (String? newLanguageCode) {
                 if (newLanguageCode != null) {
-                  // Вызываем метод провайдера для смены языка
-                  localeProvider.setLocale(Locale(newLanguageCode));
+                  localeProvider.setAppLocale(Locale(newLanguageCode));
                 }
               },
               items: AppLocalizations.supportedLocales.map((locale) {
                 return DropdownMenuItem<String>(
                   value: locale.languageCode,
-                  child: Text(
-                      _getLanguageName(locale.languageCode)),
+                  child: Text(_getLanguageName(locale.languageCode)),
                 );
               }).toList(),
+            ),
+          ),
+
+          ListTile(
+            title: Text(l10n.translationLanguage),
+            trailing: DropdownButton<String?>(
+              value: currentTranslationLocaleCode,
+              onChanged: (String? newLanguageCode) {
+                final newLocale = newLanguageCode != null ? Locale(newLanguageCode) : null;
+                localeProvider.setTranslationLocale(newLocale);
+              },
+              items: translationItems,
             ),
           ),
         ],
@@ -45,12 +69,9 @@ class SettingsScreen extends StatelessWidget {
 
   String _getLanguageName(String code) {
     switch (code) {
-      case 'en':
-        return 'English';
-      case 'ru':
-        return 'Русский';
-      default:
-        return code;
+      case 'en': return 'English';
+      case 'ru': return 'Русский';
+      default: return code;
     }
   }
 }

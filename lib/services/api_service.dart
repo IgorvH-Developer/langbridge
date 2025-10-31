@@ -397,4 +397,31 @@ class ApiService {
       return false;
     }
   }
+
+  Future<String?> translateText(String text, String targetLanguageCode) async {
+    final url = Uri.parse('$_apiBaseUrl/translate/');
+    final headers = await _getAuthHeaders();
+
+    try {
+      final response = await http.post(
+        url,
+        headers: headers,
+        body: jsonEncode({
+          'text': text,
+          'target_lang': targetLanguageCode,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(utf8.decode(response.bodyBytes));
+        return data['translated_text'];
+      } else {
+        print('Translation failed: ${response.statusCode}, Body: ${response.body}');
+        return null;
+      }
+    } catch (e) {
+      print('Error during translation request: $e');
+      return null;
+    }
+  }
 }

@@ -4,7 +4,7 @@ from fastapi import FastAPI
 
 from . import models
 from .database import SessionLocal, Base, engine
-from .routers import chats, messages, ws, users, media
+from .routers import chats, messages, ws, users, media, translate
 from .logger import logger
 
 # УБИРАЕМ ЭТУ СТРОКУ. ОНА ЯВЛЯЕТСЯ ПРИЧИНОЙ ОШИБКИ.
@@ -44,5 +44,6 @@ app.include_router(chats.router)
 app.include_router(messages.router)
 app.include_router(media.router)
 app.include_router(ws.router)
+app.include_router(translate.router)
 
 logger.info("Application startup configuration complete.")

@@ -17,5 +17,9 @@
   "registrationSuccessful": "Регистрация успешна! Теперь вы можете войти.",
   "settings": "Настройки",
   "appLanguage": "Язык приложения",
-  "confirm": "Подтвердить"
+  "confirm": "Подтвердить",
+  "translationLanguage": "Язык перевода",
+  "systemDefault": "Язык системы",
+  "translationError": "Ошибка перевода"
+
 }
