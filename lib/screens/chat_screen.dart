@@ -64,6 +64,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final ScrollController _scrollController = ScrollController();
   final Map<String, GlobalKey> _messageKeys = {};
   StreamSubscription? _recordingResultSubscription;
+  bool _isLoadingHistory = true;
 
   @override
   void initState() {
@@ -85,7 +86,6 @@ class _ChatScreenState extends State<ChatScreen> {
       }
     });
     _initScreen();
-    _loadCurrentUserAndConnect();
     _textController.addListener(() => _saveDraft(_textController.text));
     widget.chatRepository.messagesStream.addListener(_generateMessageKeys);
   }
@@ -179,21 +179,21 @@ class _ChatScreenState extends State<ChatScreen> {
       _peerName = widget.chat.title ?? "Чат";
     }
 
-    // Создаем WebRTCManager
     _webRTCManager = WebRTCManager(
       socketService: widget.chatRepository.chatSocketService,
       selfId: _currentUserId,
       chatId: widget.chat.id,
     );
-
-    // Подписываемся на сигнальные сообщения
     widget.chatRepository.chatSocketService.signalingMessageNotifier.addListener(_onSignalingMessage);
-
-    // Загружаем черновик и добавляем слушатель
     _loadDraft();
     _textController.addListener(() => mounted ? setState(() {}) : null);
 
-    if (mounted) setState(() {});
+
+    if (mounted) {
+      setState(() {
+        _isLoadingHistory = false;
+      });
+    }
   }
 
   @override
@@ -538,6 +538,41 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    Widget chatBody;
+    if (_isLoadingHistory) {
+      chatBody = const Center(child: CircularProgressIndicator());
+    } else {
+      chatBody = ValueListenableBuilder<List<Message>>(
+        valueListenable: widget.chatRepository.messagesStream,
+        builder: (context, messages, child) {
+          if (messages.isEmpty) {
+            return const Center(child: Text("Нет сообщений."));
+          }
+          return ListView.builder(
+            controller: _scrollController,
+            reverse: true, // Это заставляет список начинаться снизу
+            itemCount: messages.length,
+            itemBuilder: (context, index) {
+              // Логика отображения сообщений остается той же
+              final reversedIndex = messages.length - 1 - index;
+              final msg = messages[reversedIndex];
+              return MessageBubble(
+                key: _messageKeys[msg.id]!,
+                message: msg,
+                currentUserId: _currentUserId,
+                chatRepository: widget.chatRepository,
+                nicknamesCache: _userNicknamesCache,
+                getNickname: _getNicknameForUser,
+                onReply: _setReplyTo,
+                onTapRepliedMessage: _scrollToMessage,
+                onTranslate: _translateMessage,
+              );
+            },
+          );
+        },
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: Text(_peerName.isNotEmpty ? _peerName : (widget.chat.title ?? "Чат")),
@@ -551,33 +586,7 @@ class _ChatScreenState extends State<ChatScreen> {
           Column(
             children: [
               Expanded(
-                child: ValueListenableBuilder<List<Message>>(
-                  valueListenable: widget.chatRepository.messagesStream,
-                  builder: (context, messages, child) {
-                    if (messages.isEmpty) {
-                      return const Center(child: Text("Нет сообщений."));
-                    }
-                    return ListView.builder(
-                      controller: _scrollController,
-                      reverse: true,
-                      itemCount: messages.length,
-                      itemBuilder: (context, index) {
-                        final msg = messages[messages.length - 1 - index];
-                        return MessageBubble(
-                          key: _messageKeys[msg.id]!,
-                          message: msg,
-                          currentUserId: _currentUserId,
-                          chatRepository: widget.chatRepository,
-                          nicknamesCache: _userNicknamesCache,
-                          getNickname: _getNicknameForUser,
-                          onReply: _setReplyTo,
-                          onTapRepliedMessage: _scrollToMessage,
-                          onTranslate: _translateMessage,
-                        );
-                      },
-                    );
-                  },
-                ),
+                child: chatBody,
               ),
               if (!_isRecording && _replyingToMessage != null)
                 _buildReplyPreview(),
@@ -592,7 +601,6 @@ class _ChatScreenState extends State<ChatScreen> {
               onCancel: _cancelRecording,
               onPauseResume: () {
                 print("Пауза/возобновление видео пока не реализовано");
-                // setState(() => _isPaused = !_isPaused);
               },
               onSend: _stopRecordingAndSend,
               onToggleCamera: () {

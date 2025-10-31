@@ -175,8 +175,15 @@ class ChatSocketService {
 
   void disconnect() {
     print("Отключение от чата: $currentChatId");
-    webRTCManager?.dispose(); // <<< Добавить
-    webRTCManager = null; // <<< Добавить
+
+    // ОЧИЩАЕМ СПИСОК СООБЩЕНИЙ ПРИ ОТКЛЮЧЕНИИ ---
+    if (messagesNotifier.value.isNotEmpty) {
+      messagesNotifier.value = []; // Немедленно очищаем UI
+      print("Message notifier cleared on disconnect.");
+    }
+
+    webRTCManager?.dispose();
+    webRTCManager = null;
     _channelSubscription?.cancel();
     _channel?.sink.close();
     _channelSubscription = null;

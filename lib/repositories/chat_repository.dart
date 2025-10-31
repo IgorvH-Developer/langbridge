@@ -83,10 +83,12 @@ class ChatRepository {
   }
 
   Future<void> connectToChat(Chat chat) async {
+    // Это гарантирует, что при открытии нового чата старый не "промелькнет".
+    chatSocketService.messagesNotifier.value = [];
+    print("Message notifier cleared on new chat connection.");
 
     // 1. Немедленно подключаем сокет, чтобы не пропустить сообщения,
     //    которые могут прийти во время загрузки истории.
-    //    Передаем пустой список, так как история будет загружена ниже.
     chatSocketService.connect(chat.id, []);
 
     // 2. Запрашиваем полную историю сообщений с сервера.
@@ -96,13 +98,9 @@ class ChatRepository {
       try {
         final newMessages = messagesData.map((data) => Message.fromJson(data)).toList();
         print("Successfully fetched and parsed ${newMessages.length} messages for chat ${chat.id}");
-
-        // Обновляем главный ValueNotifier в ChatSocketService.
         chatSocketService.messagesNotifier.value = newMessages;
-
       } catch (e) {
         print("Error parsing messages for chat ${chat.id}: $e");
-        // В случае ошибки оставляем список пустым.
         chatSocketService.messagesNotifier.value = [];
       }
     } else {
