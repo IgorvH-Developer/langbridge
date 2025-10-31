@@ -126,20 +126,30 @@ async def get_user_chats(
         db: Session = Depends(database.get_db)
 ):
     """
-    Возвращает список чатов пользователя с подсчетом непрочитанных сообщений.
+    Возвращает список чатов, в которых состоит ТЕКУЩИЙ пользователь,
+    с подсчетом непрочитанных сообщений и последним сообщением.
     """
-    # 1. Получаем все чаты пользователя
-    user_chats = db.query(models.Chat).join(
+    logger.info(f"Fetching chats for user {current_user.id} ({current_user.username})")
+
+    # 1. Правильно получаем все чаты, в которых состоит текущий пользователь
+    user_chats_query = db.query(models.Chat).join(
         models.chat_participants,
+        models.Chat.id == models.chat_participants.c.chat_id
+    ).filter(
         models.chat_participants.c.user_id == current_user.id
     ).options(
+        # Предзагружаем участников, чтобы избежать N+1 запросов позже
         joinedload(models.Chat.participants)
-    ).all()
+    )
+
+    user_chats = user_chats_query.all()
 
     if not user_chats:
+        logger.info(f"No chats found for user {current_user.id}")
         return []
 
     chat_ids = [chat.id for chat in user_chats]
+    logger.info(f"User {current_user.id} is a participant of {len(chat_ids)} chats. Fetching details.")
 
     # 2. Оптимизированный запрос для получения последних сообщений
     last_message_subquery = select(
@@ -183,6 +193,7 @@ async def get_user_chats(
         key=lambda c: c.last_message.timestamp if c.last_message else c.timestamp,
         reverse=True
     )
+    logger.info(f"Returning {len(response_chats)} chats for user {current_user.id}")
     return response_chats
 
 @router.post("/{chat_id_str}/read", status_code=status.HTTP_204_NO_CONTENT)
