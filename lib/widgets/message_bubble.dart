@@ -1,3 +1,4 @@
+// lib/widgets/message_bubble.dart
 import 'package:flutter/material.dart';
 import 'package:LangBridge/models/message.dart';
 import 'package:LangBridge/repositories/chat_repository.dart';
@@ -31,7 +32,6 @@ class MessageBubble extends StatelessWidget {
     final replied = message.repliedTo!;
     final isReplyToSelf = replied.senderId == currentUserId;
 
-    // Такая же логика для заглушек, как в ChatScreen
     String getPlaceholderText(RepliedMessageInfo message) {
       switch (message.type) {
         case MessageType.audio: return "Голосовое сообщение";
@@ -87,25 +87,12 @@ class MessageBubble extends StatelessWidget {
     final isSystem = message.sender == "system";
     final bool canBeTranslated = (message.type == MessageType.text && message.content.isNotEmpty) || (message.transcription != null);
 
-    // 1. Собираем "внутренности" пузыря в отдельный виджет
+
+    // 1. Собираем "внутренности" пузыря в Column.
     final contentColumn = Column(
-      crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Для сообщений не от пользователя показываем его имя
-        if (!isUser && !isSystem)
-          FutureBuilder<String>(
-            future: getNickname(message.sender),
-            initialData: nicknamesCache[message.sender],
-            builder: (context, snapshot) {
-              final displayName = snapshot.data ?? message.sender;
-              return Text(
-                displayName,
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.black54),
-              );
-            },
-          ),
-
         // Показываем рамку ответа
         _buildRepliedMessage(context),
 
@@ -113,49 +100,31 @@ class MessageBubble extends StatelessWidget {
         if (message.isTranslating)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 8.0),
-            child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+            child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))),
           )
         else if (message.translatedContent != null)
-        // Показываем перевод и оригинал
-          Column(
-            crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-            children: [
-              Text(message.translatedContent!, style: const TextStyle(fontStyle: FontStyle.italic, color: Colors.black87)),
-              const Divider(height: 8),
-              _buildOriginalContent(isUser),
-            ],
-          )
+          _buildTranslatedContent(isUser)
         else
-        // Показываем только оригинал
           _buildOriginalContent(isUser),
-
-        // Показываем время
-        const SizedBox(height: 4),
-        Text(
-          "${message.timestamp.hour.toString().padLeft(2, '0')}:${message.timestamp.minute.toString().padLeft(2, '0')}",
-          style: const TextStyle(fontSize: 10, color: Colors.black54),
-        ),
       ],
     );
 
-    // 2. Создаем сам пузырь
+    // Создаем сам пузырь
     final bubble = GestureDetector(
         onDoubleTap: canBeTranslated ? () => onTranslate(message) : null,
         child: Container(
           constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
           margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8), // Уменьшаем вертикальный padding
           decoration: BoxDecoration(
             color: isSystem ? Colors.amber.shade100 : (isUser ? Colors.blue.shade100 : Colors.grey.shade300),
             borderRadius: BorderRadius.circular(12),
           ),
-          // ВАЖНО: Если сообщение текстовое, оборачиваем в IntrinsicWidth.
-          // Если медиа - НЕ оборачиваем.
-          child: message.type == MessageType.text ? IntrinsicWidth(child: contentColumn) : contentColumn,
+          child: contentColumn,
         )
     );
 
-    // 3. Собираем финальный виджет с Dismissible и выравниванием
+    // Собираем финальный виджет с Dismissible и выравниванием
     return Dismissible(
       key: ValueKey('dismiss_${message.id}'),
       direction: DismissDirection.endToStart,
@@ -177,16 +146,89 @@ class MessageBubble extends StatelessWidget {
     );
   }
 
-  Widget _buildOriginalContent(bool isUser) {
-    if (message.type == MessageType.video || message.type == MessageType.audio) {
-      return MediaTranscriptionWidget(
-        message: message,
-        chatRepository: chatRepository,
-        isUser: isUser,
-        key: ValueKey('${message.id}_transcription'),
+  // Виджет для отображения времени и статуса отправки
+  Widget _buildTimestampAndStatus() {
+    return Padding(
+      padding: const EdgeInsets.only(left: 8.0, top: 4.0), // Отступ слева от текста и сверху
+      child: Row(
+        mainAxisSize: MainAxisSize.min, // Уменьшаем размер до содержимого
+        children: [
+          Text(
+            "${message.timestamp.hour.toString().padLeft(2, '0')}:${message.timestamp.minute.toString().padLeft(2, '0')}",
+            style: const TextStyle(fontSize: 11, color: Colors.black54),
+          ),
+          if (message.sender == currentUserId) ...[
+            const SizedBox(width: 3),
+            Icon(
+              message.status == MessageStatus.sending
+                  ? Icons.schedule // Часики для статуса "отправляется"
+                  : Icons.done, // Галочка для "отправлено"
+              size: 14,
+              color: Colors.black54,
+            ),
+          ]
+        ],
+      ),
+    );
+  }
+
+  // Строит контент для текстового сообщения (оригинал или перевод)
+  Widget _buildTextContent(String text, {TextStyle? style}) {
+    return Wrap(
+      alignment: WrapAlignment.end, // Главное выравнивание - в конец строки
+      crossAxisAlignment: WrapCrossAlignment.end, // Выравниваем элементы по нижнему краю
+      children: [
+        // Текст сообщения. Добавляем небольшой невидимый отступ справа, чтобы время не "прилипало"
+        Padding(
+          padding: const EdgeInsets.only(right: 4.0),
+          child: Text(text, style: style),
+        ),
+        // Виджет времени, который встанет либо рядом, либо перенесется на новую строку
+        _buildTimestampAndStatus(),
+      ],
+    );
+  }
+
+  // Виджет для отображения переведенного контента
+  Widget _buildTranslatedContent(bool isUser) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Перевод всегда является текстом
+        _buildTextContent(
+          message.translatedContent!,
+          style: const TextStyle(fontStyle: FontStyle.italic, color: Colors.black87),
+        ),
+        const Divider(height: 8, thickness: 0.5),
+        // Оригинал может быть текстом или медиа
+        _buildOriginalContent(isUser, withTimestamp: false), // Показываем оригинал без времени
+      ],
+    );
+  }
+
+  // Виджет для отображения оригинального контента (текст или медиа)
+  Widget _buildOriginalContent(bool isUser, {bool withTimestamp = true}) {
+    if (message.type == MessageType.text) {
+      // Если это текст, используем новый метод с Wrap
+      return _buildTextContent(message.content);
+    } else {
+      // Если это медиа, время добавляется под виджетом
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          MediaTranscriptionWidget(
+            message: message,
+            chatRepository: chatRepository,
+            isUser: isUser,
+            key: ValueKey('${message.id}_transcription'),
+          ),
+          if (withTimestamp) // Показываем время только если это не часть перевода
+            Padding(
+              padding: const EdgeInsets.only(top: 4.0),
+              child: _buildTimestampAndStatus(),
+            ),
+        ],
       );
-    } else { // Для текста
-      return Text(message.content);
     }
   }
 }
