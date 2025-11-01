@@ -17,3 +17,4 @@ httpx
 pytest-cov
 stable-ts
 googletrans==4.0.0-rc1
+firebase-admin

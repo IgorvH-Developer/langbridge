@@ -424,4 +424,43 @@ class ApiService {
       return null;
     }
   }
+
+  Future<void> updateFcmToken(String token) async {
+    final url = Uri.parse('$_apiBaseUrl/users/update-fcm-token');
+    final headers = await _getAuthHeaders();
+    if (!headers.containsKey('Authorization')) return;
+
+    final response = await http.post(
+      url,
+      headers: headers,
+      body: jsonEncode({'fcm_token': token}),
+    );
+
+    if (response.statusCode != 204) {
+      throw Exception('Failed to update FCM token');
+    }
+  }
+
+  Future<void> notifyCall({
+    required String chatId,
+    required bool isVideo,
+    required Map<String, dynamic> offerSdp,
+  }) async {
+    final url = Uri.parse('$_apiBaseUrl/chats/$chatId/notify-call');
+    final headers = await _getAuthHeaders();
+    if (!headers.containsKey('Authorization')) return;
+
+    final response = await http.post(
+      url,
+      headers: headers,
+      body: jsonEncode({
+        'is_video': isVideo,
+        'offer_sdp': offerSdp,
+      }),
+    );
+
+    if (response.statusCode != 204) {
+      throw Exception('Failed to send call notification');
+    }
+  }
 }

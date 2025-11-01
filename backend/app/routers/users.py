@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session, joinedload, aliased
 from datetime import timedelta
 from typing import List, Optional
 from uuid import UUID as PyUUID
+from pydantic import BaseModel
 
 from .. import models, schemas, database, security
 from ..logger import logger
@@ -12,6 +13,9 @@ from jose import JWTError, jwt
 router = APIRouter(prefix="/api/users", tags=["Users"])
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/users/token")
+
+class FCMTokenUpdate(BaseModel):
+    fcm_token: str
 
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(database.get_db)):
     credentials_exception = HTTPException(
@@ -31,6 +35,19 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     if user is None:
         raise credentials_exception
     return user
+
+@router.post("/update-fcm-token", status_code=status.HTTP_204_NO_CONTENT)
+async def update_fcm_token(
+        token_data: FCMTokenUpdate,
+        current_user: models.User = Depends(get_current_user),
+        db: Session = Depends(database.get_db)
+):
+    """Обновляет FCM токен для текущего пользователя."""
+    logger.info(f"Updating FCM token for user {current_user.id}")
+    current_user.fcm_token = token_data.fcm_token
+    db.commit()
+    logger.info(f"FCM token for user {current_user.id} updated successfully.")
+    return
 
 # --- Аутентификация и Регистрация ---
 @router.post("/register", response_model=schemas.UserProfileResponse, status_code=status.HTTP_201_CREATED)

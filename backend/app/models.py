@@ -57,6 +57,7 @@ class User(Base):
     id = Column(GUID(), primary_key=True, default=uuid.uuid4)
     username = Column(String(100), unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
+    fcm_token = Column(String, nullable=True)
 
     # Profile fields
     full_name = Column(String(150))

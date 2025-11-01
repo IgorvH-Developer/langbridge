@@ -4,12 +4,63 @@ from uuid import UUID as PyUUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import and_, select, func, desc, join
 from sqlalchemy.orm import Session, aliased, joinedload, contains_eager
+import json
 
+from ..fcm_service import send_push_notification
+from pydantic import BaseModel
 from .users import get_current_user
 from .. import models, database, schemas
 from ..logger import logger
 
 router = APIRouter(prefix="/api/chats", tags=["chats"])
+
+class CallNotificationPayload(BaseModel):
+    is_video: bool
+    offer_sdp: dict # Клиент будет присылать offer прямо сюда
+
+@router.post("/{chat_id_str}/notify-call", status_code=status.HTTP_204_NO_CONTENT)
+async def notify_call(
+        chat_id_str: str,
+        payload: CallNotificationPayload,
+        current_user: models.User = Depends(get_current_user),
+        db: Session = Depends(database.get_db)
+):
+    """Отправляет push-уведомление о входящем звонке другим участникам чата."""
+    try:
+        chat_uuid = PyUUID(chat_id_str)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid chat ID format")
+
+    # Находим всех участников чата, кроме звонящего
+    participants_to_notify = db.query(models.User).join(models.chat_participants).filter(
+        models.chat_participants.c.chat_id == chat_uuid,
+        models.User.id != current_user.id
+    ).all()
+
+    fcm_tokens = [p.fcm_token for p in participants_to_notify if p.fcm_token]
+
+    if not fcm_tokens:
+        logger.warning(f"User {current_user.id} is calling in chat {chat_id_str}, but no users with FCM tokens found to notify.")
+        return
+
+    call_type_str = "Видеозвонок" if payload.is_video else "Аудиозвонок"
+
+    notification_payload = {
+        "title": f"Входящий {call_type_str}",
+        "body": f"От {current_user.username}",
+    }
+
+    data_payload = {
+        "type": "incoming_call",
+        "chat_id": chat_id_str,
+        "caller_name": current_user.username,
+        "caller_id": str(current_user.id),
+        "is_video": str(payload.is_video).lower(),
+        "offer_sdp": json.dumps(payload.offer_sdp)
+    }
+
+    await send_push_notification(fcm_tokens, notification_payload, data_payload)
+    logger.info(f"Sent call notification to {len(fcm_tokens)} users for chat {chat_id_str}.")
 
 
 @router.post("/get-or-create/private", response_model=schemas.ChatWithParticipantsResponse, status_code=status.HTTP_200_OK)

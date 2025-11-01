@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "508330035457",
+    "project_id": "langbridge-17ead",
+    "storage_bucket": "langbridge-17ead.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:508330035457:android:353133afb51f5891103300",
+        "android_client_info": {
+          "package_name": "com.example.langbridge"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAj0coAvdjSb4Zi-8y38CpcdQRLcgWE9TY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -4,8 +4,8 @@ from uuid import UUID as PyUUID
 from datetime import datetime
 import json
 
-from starlette.websockets import WebSocketState
-
+from .. import database, models, schemas
+from ..fcm_service import send_push_notification
 from .. import database, models
 from ..schemas import MessageResponse
 from ..websocket_manager import ConnectionManager
@@ -98,15 +98,50 @@ async def websocket_endpoint(
             db.refresh(db_message, ['reply_to_message'])
 
             # Преобразуем сообщение из БД в Pydantic-схему
-            response_model = MessageResponse.model_validate(db_message)
+            response_model = schemas.MessageResponse.model_validate(db_message)
 
             # Добавляем временный ID в модель ответа, если он был
             if client_message_id:
                 response_model.client_message_id = client_message_id
 
-            # Сериализуем и отправляем
             message_to_broadcast = json.loads(response_model.model_dump_json())
             await manager.broadcast(chat_id_str, message_to_broadcast)
+
+            # Получаем всех участников чата, кроме отправителя
+            participants_to_notify = db.query(models.User).join(
+                models.chat_participants
+            ).filter(
+                models.chat_participants.c.chat_id == chat_uuid_obj,
+                models.User.id != sender_uuid_obj
+            ).all()
+
+            # Собираем их FCM токены
+            fcm_tokens = [p.fcm_token for p in participants_to_notify if p.fcm_token]
+
+            if fcm_tokens:
+                # Получаем имя отправителя
+                sender_profile = db.query(models.User).filter(models.User.id == sender_uuid_obj).first()
+                sender_name = sender_profile.username if sender_profile else "New message"
+
+                # Формируем видимую часть уведомления
+                notification_payload = {
+                    "title": sender_name,
+                    "body": content, # Текст сообщения
+                }
+
+                # Формируем данные для обработки в приложении.
+                # ВАЖНО: ВСЕ значения должны быть строками!
+                data_payload = {
+                    "type": "new_message",
+                    "chat_id": str(chat_id_str), # Приводим к строке на всякий случай
+                    "sender_name": str(sender_name),
+                    "message_id": str(db_message.id), # Добавляем ID сообщения
+                    "message_content": str(content) # Добавляем текст сообщения
+                }
+
+                logger.debug(f"Preparing to send push notification. Data payload: {data_payload}")
+                await send_push_notification(fcm_tokens, notification_payload, data_payload)
+
 
     except WebSocketDisconnect:
         logger.info(f"User {user_id} disconnected from chat: {chat_id_str}")

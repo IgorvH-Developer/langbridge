@@ -3,6 +3,7 @@ import 'package:LangBridge/repositories/auth_repository.dart';
 import 'package:LangBridge/screens/main_screen.dart';
 import 'package:LangBridge/screens/select_language_screen.dart';
 import 'package:LangBridge/l10n/app_localizations.dart';
+import 'package:LangBridge/services/fcm_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -17,6 +18,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
   final _authRepository = AuthRepository();
   bool _isLoading = false;
+  final FcmService _fcmService = FcmService();
 
   Future<void> _performLogin() async {
     if (!mounted) return;
@@ -33,6 +35,7 @@ class _LoginScreenState extends State<LoginScreen> {
     if (mounted) {
       setState(() => _isLoading = false);
       if (success) {
+        await _fcmService.sendTokenToServer();
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const MainScreen()),
         );

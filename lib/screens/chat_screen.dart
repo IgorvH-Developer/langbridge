@@ -1,3 +1,4 @@
+// lib/screens/chat_screen.dart
 import 'dart:io';
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -9,6 +10,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
+import 'dart:convert';
 
 import 'package:LangBridge/models/chat.dart';
 import 'package:LangBridge/models/message.dart';
@@ -47,12 +49,14 @@ class _ChatScreenState extends State<ChatScreen> {
   final ImagePicker _picker = ImagePicker();
   final AudioRecorder _soundRecorder = AudioRecorder();
   String _currentUserId = '';
+
   MediaRecordMode _mediaRecordMode = MediaRecordMode.audio;
   bool _isRecording = false;
   bool _isRecordingLocked = false;
   Timer? _recordingTimer;
   int _recordingDurationSeconds = 0;
   bool _isActionCancelled = false;
+
   String? _recordingPath;
   bool _isPaused = false;
   double _dragOffset = 0.0;
@@ -91,23 +95,18 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _translateMessage(Message message) async {
-    // 1. Проверяем, есть ли у сообщения уже перевод или оно в процессе
     final currentMessage = widget.chatRepository.messagesStream.value.firstWhere((m) => m.id == message.id);
     if (currentMessage.translatedContent != null) {
-      // Если перевод есть, двойной тап его убирает
       _updateMessageState(message.id, isTranslating: false, translatedContent: _kMagicNullString);
       return;
     }
-    if (currentMessage.isTranslating) return; // Уже переводим
+    if (currentMessage.isTranslating) return;
 
-    // 2. Получаем язык для перевода из провайдера
     final localeProvider = Provider.of<LocaleProvider>(context, listen: false);
     final targetLocale = localeProvider.translationLocale ?? Localizations.localeOf(context);
 
-    // 3. Обновляем UI, чтобы показать индикатор загрузки
     _updateMessageState(message.id, isTranslating: true);
 
-    // 4. Выполняем API запрос
     final originalContent = message.type == MessageType.text ? message.content : message.transcription?.fullText;
     if (originalContent == null || originalContent.isEmpty) {
       _updateMessageState(message.id, isTranslating: false);
@@ -116,7 +115,6 @@ class _ChatScreenState extends State<ChatScreen> {
 
     final translated = await _apiService.translateText(originalContent, targetLocale.languageCode);
 
-    // 5. Обновляем UI с результатом
     if (mounted) {
       _updateMessageState(
         message.id,
@@ -135,7 +133,6 @@ class _ChatScreenState extends State<ChatScreen> {
         isTranslating: isTranslating,
         translatedContent: translatedContent,
       );
-      // Обновляем ValueNotifier, чтобы UI перерисовался
       widget.chatRepository.messagesStream.value = currentMessages;
     }
   }
@@ -165,7 +162,7 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _initSoundRecorder() async {
     var status = await Permission.microphone.request();
     if (status != PermissionStatus.granted) {
-      throw RecordingPermissionException('Microphone permission not granted');
+      throw Exception('Microphone permission not granted');
     }
   }
 
@@ -218,8 +215,6 @@ class _ChatScreenState extends State<ChatScreen> {
         _messageKeys[message.id] = GlobalKey();
       }
     }
-    // Этот setState нужен, если ключи используются для чего-то, что требует перерисовки
-    // В данном случае, для прокрутки, он не обязателен, но оставим для надежности
     if (mounted) setState(() {});
   }
 
@@ -247,16 +242,12 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<String> _getNicknameForUser(String userId) async {
-    // Если никнейм уже в кэше, возвращаем его немедленно
     if (_userNicknamesCache.containsKey(userId)) {
       return _userNicknamesCache[userId]!;
     }
-
-    // Если в кэше нет, делаем запрос
     try {
       final userProfile = await widget.chatRepository.getUserProfile(userId);
       if (userProfile != null && userProfile.username.isNotEmpty) {
-        // Сохраняем в кэш и возвращаем
         if (mounted) {
           setState(() {
             _userNicknamesCache[userId] = userProfile.username;
@@ -267,9 +258,39 @@ class _ChatScreenState extends State<ChatScreen> {
     } catch (e) {
       print("Ошибка получения профиля для $userId: $e");
     }
-
-    // В случае ошибки или если профиль не найден, возвращаем ID
     return userId;
+  }
+
+  Future<void> _loadCurrentUserAndConnect() async {
+    final userId = await AuthRepository.getCurrentUserId();
+    if (!mounted || userId == null) return;
+
+    setState(() {
+      _currentUserId = userId;
+    });
+
+    if (widget.chat.unreadCount > 0) {
+      widget.chatRepository.markChatAsRead(widget.chat.id);
+    }
+
+    await widget.chatRepository.connectToChat(widget.chat);
+  }
+
+  Future<void> _loadDraft() async {
+    final prefs = await SharedPreferences.getInstance();
+    final draft = prefs.getString('draft_${widget.chat.id}');
+    if (draft != null) {
+      _textController.text = draft;
+    }
+  }
+
+  Future<void> _saveDraft(String text) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (text.trim().isEmpty) {
+      await prefs.remove('draft_${widget.chat.id}');
+    } else {
+      await prefs.setString('draft_${widget.chat.id}', text);
+    }
   }
 
   void _handleSignalingMessage(Map<String, dynamic>? data) async {
@@ -300,8 +321,9 @@ class _ChatScreenState extends State<ChatScreen> {
     var cameraStatus = await Permission.camera.request();
     var microphoneStatus = await Permission.microphone.request();
 
+    if (!mounted) return;
     if ((isVideo && !cameraStatus.isGranted) || !microphoneStatus.isGranted) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Для звонков необходим доступ к камере и микрофону.")));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Для звонков необходим доступ к камере и микрофону.")));
       return;
     }
 
@@ -336,10 +358,7 @@ class _ChatScreenState extends State<ChatScreen> {
               child: const Text("Отклонить"),
               onPressed: () {
                 print('[ChatScreen][${TimeOfDay.now()}] Диалог: Пользователь отклонил звонок.');
-                widget.chatRepository.chatSocketService.sendSignalingMessage({
-                  'type': 'call_end',
-                  'sender_id': _currentUserId,
-                });
+                widget.chatRepository.chatSocketService.sendSignalingMessage({'type': 'call_end'});
                 Navigator.of(context).pop();
               },
             ),
@@ -347,16 +366,14 @@ class _ChatScreenState extends State<ChatScreen> {
               child: const Text("Принять"),
               onPressed: () {
                 print('[ChatScreen][${TimeOfDay.now()}] Диалог: Пользователь принял звонок. Переходим на CallScreen...');
-                Navigator.of(context).pop(); // Закрываем диалог
-
-                // Немедленно переходим на экран звонка, передавая ему все необходимое
+                Navigator.of(context).pop();
                 Navigator.of(context).push(MaterialPageRoute(
                   builder: (_) => CallScreen(
                     manager: _webRTCManager,
                     isVideoCall: isVideoCall,
                     peerName: _peerName,
-                    isInitiator: false, // Важно: это принимающая сторона
-                    offerSdp: offerData['sdp'], // Передаем offer для обработки на экране звонка
+                    isInitiator: false,
+                    offerSdp: offerData['sdp'],
                   ),
                 ));
               },
@@ -366,7 +383,6 @@ class _ChatScreenState extends State<ChatScreen> {
       },
     );
   }
-
 
   void _startRecording() {
     setState(() {
@@ -380,7 +396,6 @@ class _ChatScreenState extends State<ChatScreen> {
     _performStartRecording().then((success) {
       if (success && mounted) {
         _recordingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-          // Таймер не тикает, если на паузе
           if (mounted && !_isPaused) setState(() => _recordingDurationSeconds++);
         });
       }
@@ -388,21 +403,17 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _toggleMediaMode() async {
-    // Если текущий режим - аудио, то мы хотим переключиться на видео
     if (_mediaRecordMode == MediaRecordMode.audio) {
-      // Проверяем и запрашиваем разрешения
       final cameraStatus = await Permission.camera.request();
       final microphoneStatus = await Permission.microphone.request();
 
       if (cameraStatus.isGranted && microphoneStatus.isGranted) {
-        // Если разрешения есть, меняем режим
         if (mounted) {
           setState(() {
             _mediaRecordMode = MediaRecordMode.video;
           });
         }
       } else {
-        // Если разрешений нет, показываем сообщение и не меняем режим
         print("Разрешения для записи видео не предоставлены.");
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -411,7 +422,6 @@ class _ChatScreenState extends State<ChatScreen> {
         }
       }
     } else {
-      // Если текущий режим - видео, просто переключаемся обратно на аудио
       if (mounted) {
         setState(() {
           _mediaRecordMode = MediaRecordMode.audio;
@@ -465,12 +475,28 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  Future<void> _sendAudioMedia(String path) async {
+    if (_currentUserId.isEmpty || widget.chat.id.isEmpty) return;
+
+    final replyId = _replyingToMessage?.id;
+
+    await widget.chatRepository.sendAudioMessage(
+      filePath: path,
+      chatId: widget.chat.id,
+      senderId: _currentUserId,
+      replyToMessageId: replyId,
+    );
+
+    if (replyId != null) {
+      _cancelReply();
+    }
+  }
+
   Future<void> _stopRecordingAndSend() async {
     print("Stopping recording and sending for media type: $_mediaRecordMode");
     _recordingTimer?.cancel();
 
     if (_mediaRecordMode == MediaRecordMode.video) {
-      // Для видео просто отправляем команду. Результат обработает StreamSubscription.
       await NativeVideoRecorder.stopRecording();
     } else if (_mediaRecordMode == MediaRecordMode.audio) {
       final path = await _soundRecorder.stop();
@@ -479,7 +505,6 @@ class _ChatScreenState extends State<ChatScreen> {
       }
     }
 
-    // Общий сброс UI состояния в самом конце
     if (mounted) {
       setState(() {
         _isRecording = false;
@@ -523,7 +548,6 @@ class _ChatScreenState extends State<ChatScreen> {
       }
     }
 
-    // Общий сброс UI
     if (mounted) {
       setState(() {
         _isRecording = false;
@@ -550,10 +574,9 @@ class _ChatScreenState extends State<ChatScreen> {
           }
           return ListView.builder(
             controller: _scrollController,
-            reverse: true, // Это заставляет список начинаться снизу
+            reverse: true,
             itemCount: messages.length,
             itemBuilder: (context, index) {
-              // Логика отображения сообщений остается той же
               final reversedIndex = messages.length - 1 - index;
               final msg = messages[reversedIndex];
               return MessageBubble(
@@ -616,7 +639,6 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _buildReplyPreview() {
-    // Вспомогательная функция для получения текста-заглушки
     String getPlaceholderText(Message message) {
       switch (message.type) {
         case MessageType.audio: return "Голосовое сообщение";
@@ -639,7 +661,6 @@ class _ChatScreenState extends State<ChatScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  // Тут можно использовать getNickname, если нужен никнейм
                   _replyingToMessage!.sender == _currentUserId ? "Вы" : _peerName,
                   style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
                 ),
@@ -663,7 +684,6 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Widget _buildInputArea() {
     final bool showSendButton = _textController.text.trim().isNotEmpty;
-    // Максимальная дистанция свайпа вверх для блокировки
     const double lockThreshold = 80.0;
 
     if (_isRecordingLocked && _mediaRecordMode == MediaRecordMode.audio) {
@@ -687,11 +707,13 @@ class _ChatScreenState extends State<ChatScreen> {
                   onPressed: _togglePauseResume,
                 ),
                 IconButton(
-                  icon: const Icon(Icons.send, color: Colors.blue, size: 28),
+                  icon: const Icon(Icons.send),
                   onPressed: _stopRecordingAndSend,
+                  color: Colors.blue,
+                  iconSize: 28,
                 ),
               ],
-            )
+            ),
           ],
         ),
       );
@@ -887,64 +909,6 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
       ),
     );
-  }
-
-  void _toggleMediaRecordMode() {
-    if (_isRecording) return;
-    setState(() {
-      _mediaRecordMode = _mediaRecordMode == MediaRecordMode.audio
-          ? MediaRecordMode.video
-          : MediaRecordMode.audio;
-    });
-  }
-
-  Future<void> _loadDraft() async {
-    final prefs = await SharedPreferences.getInstance();
-    final draft = prefs.getString('draft_${widget.chat.id}');
-    if (draft != null) {
-      _textController.text = draft;
-    }
-  }
-
-  Future<void> _saveDraft(String text) async {
-    final prefs = await SharedPreferences.getInstance();
-    if (text.trim().isEmpty) {
-      await prefs.remove('draft_${widget.chat.id}');
-    } else {
-      await prefs.setString('draft_${widget.chat.id}', text);
-    }
-  }
-
-  Future<void> _sendAudioMedia(String path) async {
-    if (_currentUserId.isEmpty || widget.chat.id.isEmpty) return;
-
-    final replyId = _replyingToMessage?.id;
-
-    await widget.chatRepository.sendAudioMessage(
-      filePath: path,
-      chatId: widget.chat.id,
-      senderId: _currentUserId,
-      replyToMessageId: replyId,
-    );
-
-    if (replyId != null) {
-      _cancelReply();
-    }
-  }
-
-  Future<void> _loadCurrentUserAndConnect() async {
-    final userId = await AuthRepository.getCurrentUserId();
-    if (!mounted || userId == null) return;
-
-    setState(() {
-      _currentUserId = userId;
-    });
-
-    if (widget.chat.unreadCount > 0) {
-      widget.chatRepository.markChatAsRead(widget.chat.id);
-    }
-
-    await widget.chatRepository.connectToChat(widget.chat);
   }
 
   void _sendMessage() {
