@@ -317,13 +317,15 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _startCall(bool isVideo) async {
+    final l10n = AppLocalizations.of(context)!;
+
     print('[ChatScreen][${TimeOfDay.now()}] -> _startCall: Начинаем ${isVideo ? "видео" : "аудио"}звонок...');
     var cameraStatus = await Permission.camera.request();
     var microphoneStatus = await Permission.microphone.request();
 
     if (!mounted) return;
     if ((isVideo && !cameraStatus.isGranted) || !microphoneStatus.isGranted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Для звонков необходим доступ к камере и микрофону.")));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.permissionToCallNotification)));
       return;
     }
 
@@ -351,11 +353,13 @@ class _ChatScreenState extends State<ChatScreen> {
       context: context,
       barrierDismissible: false,
       builder: (context) {
+        final l10n = AppLocalizations.of(context)!;
+
         return AlertDialog(
-          title: Text("Входящий ${isVideoCall ? 'видео' : 'аудио'}звонок от $_peerName"),
+          title: Text("${l10n.incoming} ${isVideoCall ? l10n.video : l10n.audio} звонок от $_peerName"),
           actions: [
             TextButton(
-              child: const Text("Отклонить"),
+              child: Text(l10n.reject),
               onPressed: () {
                 print('[ChatScreen][${TimeOfDay.now()}] Диалог: Пользователь отклонил звонок.');
                 widget.chatRepository.chatSocketService.sendSignalingMessage({'type': 'call_end'});
@@ -363,7 +367,7 @@ class _ChatScreenState extends State<ChatScreen> {
               },
             ),
             TextButton(
-              child: const Text("Принять"),
+              child: Text(l10n.accept),
               onPressed: () {
                 print('[ChatScreen][${TimeOfDay.now()}] Диалог: Пользователь принял звонок. Переходим на CallScreen...');
                 Navigator.of(context).pop();
@@ -403,6 +407,8 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _toggleMediaMode() async {
+    final l10n = AppLocalizations.of(context)!;
+
     if (_mediaRecordMode == MediaRecordMode.audio) {
       final cameraStatus = await Permission.camera.request();
       final microphoneStatus = await Permission.microphone.request();
@@ -417,7 +423,7 @@ class _ChatScreenState extends State<ChatScreen> {
         print("Разрешения для записи видео не предоставлены.");
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Для записи видео нужен доступ к камере и микрофону.")),
+            SnackBar(content: Text(l10n.permissionToVideoNotification)),
           );
         }
       }
@@ -452,6 +458,8 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<bool> _performStartAudioRecording() async {
+    final l10n = AppLocalizations.of(context)!;
+
     try {
       final dir = await getApplicationDocumentsDirectory();
       _recordingPath = '${dir.path}/${DateTime.now().millisecondsSinceEpoch}.m4a';
@@ -468,7 +476,7 @@ class _ChatScreenState extends State<ChatScreen> {
       print("КРИТИЧЕСКАЯ ОШИБКА при старте записи: $e");
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Ошибка записи: ${e.toString()}")),
+          SnackBar(content: Text("${l10n.recordingError}: ${e.toString()}")),
         );
       }
       return false;
@@ -562,6 +570,8 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+
     Widget chatBody;
     if (_isLoadingHistory) {
       chatBody = const Center(child: CircularProgressIndicator());
@@ -570,7 +580,7 @@ class _ChatScreenState extends State<ChatScreen> {
         valueListenable: widget.chatRepository.messagesStream,
         builder: (context, messages, child) {
           if (messages.isEmpty) {
-            return const Center(child: Text("Нет сообщений."));
+            return Center(child: Text(l10n.noMessages));
           }
           return ListView.builder(
             controller: _scrollController,
@@ -870,6 +880,7 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget _buildRecordingUI() {
     final minutes = (_recordingDurationSeconds ~/ 60).toString().padLeft(2, '0');
     final seconds = (_recordingDurationSeconds % 60).toString().padLeft(2, '0');
+    final l10n = AppLocalizations.of(context)!;
 
     // Анимация прозрачности для UI отмены
     return AnimatedOpacity(
@@ -890,12 +901,12 @@ class _ChatScreenState extends State<ChatScreen> {
             Text("$minutes:$seconds", style: const TextStyle(fontSize: 16)),
             const Spacer(),
             if (!_isRecordingLocked) // Показываем подсказку, только если запись не заблокирована
-              const Row(
+              Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(Icons.arrow_back, size: 18, color: Colors.grey),
-                  Text(" Отмена | ", style: TextStyle(color: Colors.grey)),
-                  Text("Вверх ", style: TextStyle(color: Colors.grey)),
+                  Text(" ${l10n.cancel} | ", style: TextStyle(color: Colors.grey)),
+                  Text("${l10n.upp} ", style: TextStyle(color: Colors.grey)),
                   Icon(Icons.lock, size: 16, color: Colors.grey),
                 ],
               ),

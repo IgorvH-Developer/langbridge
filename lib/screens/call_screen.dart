@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:permission_handler/permission_handler.dart';
+import '../l10n/app_localizations.dart';
 import '../services/webrtc_manager.dart';
 
 class CallScreen extends StatefulWidget {
@@ -61,6 +62,8 @@ class _CallScreenState extends State<CallScreen> {
   }
 
   Future<void> _initializeCall() async {
+    final l10n = AppLocalizations.of(context)!;
+
     // Запрашиваем разрешения
     var cameraStatus = await Permission.camera.request();
     var microphoneStatus = await Permission.microphone.request();
@@ -68,7 +71,7 @@ class _CallScreenState extends State<CallScreen> {
     if (!mounted) return;
 
     if ((widget.isVideoCall && !cameraStatus.isGranted) || !microphoneStatus.isGranted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Нет разрешений для звонка.")));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.noPermissionToCall)));
       widget.manager.endCall(); // Завершаем звонок, если нет разрешений
       return;
     }

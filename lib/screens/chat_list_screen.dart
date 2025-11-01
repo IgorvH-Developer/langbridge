@@ -9,6 +9,7 @@ import 'package:LangBridge/models/message.dart';
 import 'package:LangBridge/screens/chat_screen.dart';
 import 'package:LangBridge/models/chat.dart';
 import 'package:LangBridge/repositories/auth_repository.dart';
+import 'package:LangBridge/l10n/app_localizations.dart';
 
 class ChatListScreen extends StatefulWidget {
   const ChatListScreen({super.key});
@@ -83,9 +84,11 @@ class _ChatListScreenState extends State<ChatListScreen> {
   // --- ОСНОВНОЙ МЕТОД BUILD ---
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Чаты"),
+        title: Text(l10n.chats),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -96,7 +99,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _chats.isEmpty
-          ? const Center(child: Text("У вас пока нет чатов."))
+          ? Center(child: Text(l10n.youDontHaveChatsYet))
           : ListView.builder(itemCount: _chats.length,
         itemBuilder: (context, index) {
           final chat = _chats[index];
@@ -169,10 +172,12 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
   // --- ВСПОМОГАТЕЛЬНЫЙ ВИДЖЕТ ДЛЯ SUBTITLE ---
   Widget _buildSubtitle(String? draft, Message? lastMessage) {
+    final l10n = AppLocalizations.of(context)!;
+
     if (draft != null && draft.isNotEmpty) {
       return Row(
         children: [
-          const Text("[Черновик] ", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+          Text("[${l10n.draft}] ", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
           Expanded(
             child: Text(
               draft,
@@ -186,7 +191,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
     // 2. Если нет последнего сообщения
     if (lastMessage == null) {
-      return const Text("Нет сообщений", style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey));
+      return Text(l10n.noMessages, style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey));
     }
 
     // 3. Определяем контент в зависимости от типа сообщения

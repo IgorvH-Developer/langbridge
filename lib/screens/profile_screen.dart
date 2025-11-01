@@ -33,6 +33,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _startChat() async {
+    final l10n = AppLocalizations.of(context)!;
+
     if (_profile == null) return;
 
     // Показываем индикатор загрузки
@@ -58,7 +60,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } else {
       // Показываем ошибку
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Не удалось создать чат."))
+          SnackBar(content: Text(l10n.failedToLoadChat))
       );
     }
   }
@@ -164,11 +166,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildBody() {
+    final l10n = AppLocalizations.of(context)!;
+
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
     if (_profile == null) {
-      return const Center(child: Text("Не удалось загрузить профиль."));
+      return Center(child: Text(l10n.failedToLoadProfile));
     }
 
     final profile = _profile!;
@@ -189,22 +193,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
           Text(profile.fullName!, style: Theme.of(context).textTheme.titleMedium, textAlign: TextAlign.center),
 
         const SizedBox(height: 24),
-        _buildProfileInfoRow(Icons.person_outline, "Возраст", profile.age?.toString() ?? "Не указан"),
-        _buildProfileInfoRow(Icons.flag_outlined, "Страна", profile.country ?? "Не указана"),
-        _buildProfileInfoRow(Icons.height, "Рост", profile.height != null ? "${profile.height} см" : "Не указан"),
+        _buildProfileInfoRow(Icons.person_outline, l10n.age, profile.age?.toString() ?? l10n.notSpecified),
+        _buildProfileInfoRow(Icons.flag_outlined, l10n.country, profile.country ?? l10n.notSpecified),
+        _buildProfileInfoRow(Icons.height, l10n.heigh, profile.height != null ? "${profile.height} ${l10n.centimeters}" : l10n.notSpecified),
 
         const Divider(height: 32),
-        Text("О себе", style: Theme.of(context).textTheme.titleLarge),
+        Text(l10n.aboutMyself, style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 8),
-        Text(profile.bio ?? "Нет информации."),
+        Text(profile.bio ?? l10n.noInformation),
 
         const Divider(height: 32),
-        Text("Языки", style: Theme.of(context).textTheme.titleLarge),
+        Text(l10n.languages, style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 8),
         ...profile.languages.map((lang) => ListTile(
           leading: const Icon(Icons.language),
           title: Text(lang.name),
-          subtitle: Text(lang.type == 'native' ? 'Родной' : 'Изучаю (${lang.level})'),
+          subtitle: Text(lang.type == 'native' ? l10n.native : '${l10n.learn} (${lang.level})'),
         )),
       ],
     );

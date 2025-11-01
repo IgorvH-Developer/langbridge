@@ -5,7 +5,9 @@ import 'package:image_picker/image_picker.dart';
 import 'package:LangBridge/models/user_profile.dart';
 import 'package:LangBridge/models/language.dart'; // <<< Убедитесь, что эта модель создана
 import 'package:LangBridge/services/api_service.dart';
-import 'package:LangBridge/config/app_config.dart'; // <<< Импортируем для сборки URL аватара
+import 'package:LangBridge/config/app_config.dart';
+
+import '../l10n/app_localizations.dart'; // <<< Импортируем для сборки URL аватара
 
 class EditProfileScreen extends StatefulWidget {
   final UserProfile profile;
@@ -97,6 +99,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   Future<void> _saveProfile() async {
+    final l10n = AppLocalizations.of(context)!;
+
     if (!_formKey.currentState!.validate() || _isSaving) return;
 
     setState(() => _isSaving = true);
@@ -150,19 +154,21 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     if (mounted) {
       setState(() => _isSaving = false);
       if (updatedProfile != null) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Профиль сохранен!"), backgroundColor: Colors.green));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.profileSaved), backgroundColor: Colors.green));
         Navigator.of(context).pop(updatedProfile); // Возвращаем результат
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Ошибка сохранения. Попробуйте снова."), backgroundColor: Colors.red));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.saveErrorTryAgain), backgroundColor: Colors.red));
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Редактировать профиль"),
+        title: Text(l10n.editProfile),
         actions: [
           if (_isSaving) const Padding(padding: EdgeInsets.all(16.0), child: CircularProgressIndicator(color: Colors.white)),
           if (!_isSaving) IconButton(onPressed: _saveProfile, icon: const Icon(Icons.save), tooltip: "Сохранить"),
@@ -194,7 +200,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             ElevatedButton(
               style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
               onPressed: _isSaving ? null : _saveProfile,
-              child: const Text("Сохранить изменения"),
+              child: Text(l10n.saveChanges),
             ),
           ],
         ),
@@ -239,16 +245,18 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   Widget _buildNativeLanguageSelector() {
+    final l10n = AppLocalizations.of(context)!;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text("Родной язык", style: Theme.of(context).textTheme.titleMedium),
+        Text(l10n.nativeLanguage, style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
         DropdownButtonFormField<int?>(
           value: _nativeLanguage?.id,
           isExpanded: true,
           decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 12)),
-          hint: const Text("Выберите родной язык"),
+          hint: Text(l10n.chooseNativeLanguage),
           items: _allLanguages.map((lang) => DropdownMenuItem(value: lang.id, child: Text(lang.name))).toList(),
           onChanged: (langId) {
             if (langId != null) {
@@ -264,20 +272,22 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   Widget _buildLearningLanguagesSection() {
+    final l10n = AppLocalizations.of(context)!;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text("Изучаемые языки", style: Theme.of(context).textTheme.titleMedium),
+            Text(l10n.learningLanguages, style: Theme.of(context).textTheme.titleMedium),
             IconButton(icon: const Icon(Icons.add_circle, color: Colors.green, size: 30), onPressed: () => _showAddLearningLanguageDialog(), tooltip: "Добавить язык"),
           ],
         ),
         if (_learningLanguages.isEmpty)
-          const Padding(
+          Padding(
             padding: EdgeInsets.symmetric(vertical: 8.0),
-            child: Text("Вы не добавили ни одного языка.", style: TextStyle(color: Colors.grey)),
+            child: Text(l10n.youDidntAddAnyLanguage, style: TextStyle(color: Colors.grey)),
           ),
         ..._learningLanguages.map((lang) {
           return Card(
@@ -285,7 +295,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             child: ListTile(
               leading: CircleAvatar(child: Text(lang.code.toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold))),
               title: Text(lang.name),
-              subtitle: Text("Уровень: ${lang.level}"),
+              subtitle: Text("${l10n.level}: ${lang.level}"),
               trailing: IconButton(
                 icon: const Icon(Icons.delete, color: Colors.red),
                 onPressed: () => setState(() => _learningLanguages.remove(lang)),
@@ -301,6 +311,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     Language? selectedLang;
     String selectedLevel = 'A1';
     final levels = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
+    final l10n = AppLocalizations.of(context)!;
 
     // Фильтруем языки, которые уже выбраны (как родной или изучаемый)
     final availableLangs = _allLanguages.where((l) => l.id != _nativeLanguage?.id && !_learningLanguages.any((learnLang) => learnLang.id == l.id)).toList();
@@ -311,28 +322,28 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
-              title: const Text("Добавить изучаемый язык"),
+              title: Text(l10n.addLearningLanguage),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   DropdownButton<Language>(
                     value: selectedLang,
                     isExpanded: true,
-                    hint: const Text("Выберите язык"),
+                    hint: Text(l10n.chooseLanguage),
                     items: availableLangs.map((lang) => DropdownMenuItem(value: lang, child: Text(lang.name))).toList(),
                     onChanged: (lang) => setDialogState(() => selectedLang = lang),
                   ),
                   DropdownButton<String>(
                     value: selectedLevel,
                     isExpanded: true,
-                    hint: const Text("Уровень владения"),
+                    hint: Text(l10n.knowledgeLevel),
                     items: levels.map((level) => DropdownMenuItem(value: level, child: Text(level))).toList(),
                     onChanged: (level) => setDialogState(() => selectedLevel = level!),
                   ),
                 ],
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text("Отмена")),
+                TextButton(onPressed: () => Navigator.of(context).pop(), child: Text(l10n.cancel)),
                 ElevatedButton(
                   onPressed: () {
                     if (selectedLang != null) {
@@ -342,7 +353,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       Navigator.of(context).pop();
                     }
                   },
-                  child: const Text("Добавить"),
+                  child: Text(l10n.add),
                 ),
               ],
             );

@@ -229,6 +229,270 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Translation failed'**
   String get translationError;
+
+  /// No description provided for @cancel.
+  ///
+  /// In en, this message translates to:
+  /// **'cancel'**
+  String get cancel;
+
+  /// No description provided for @upp.
+  ///
+  /// In en, this message translates to:
+  /// **'upp'**
+  String get upp;
+
+  /// No description provided for @permissionToCallNotification.
+  ///
+  /// In en, this message translates to:
+  /// **'Permission to call notification'**
+  String get permissionToCallNotification;
+
+  /// No description provided for @permissionToVideoNotification.
+  ///
+  /// In en, this message translates to:
+  /// **'Permission to video notification'**
+  String get permissionToVideoNotification;
+
+  /// No description provided for @incoming.
+  ///
+  /// In en, this message translates to:
+  /// **'incoming'**
+  String get incoming;
+
+  /// No description provided for @video.
+  ///
+  /// In en, this message translates to:
+  /// **'video'**
+  String get video;
+
+  /// No description provided for @audio.
+  ///
+  /// In en, this message translates to:
+  /// **'audio'**
+  String get audio;
+
+  /// No description provided for @reject.
+  ///
+  /// In en, this message translates to:
+  /// **'reject'**
+  String get reject;
+
+  /// No description provided for @accept.
+  ///
+  /// In en, this message translates to:
+  /// **'accept'**
+  String get accept;
+
+  /// No description provided for @recordingError.
+  ///
+  /// In en, this message translates to:
+  /// **'recording error'**
+  String get recordingError;
+
+  /// No description provided for @noMessages.
+  ///
+  /// In en, this message translates to:
+  /// **'no messages'**
+  String get noMessages;
+
+  /// No description provided for @noPermissionToCall.
+  ///
+  /// In en, this message translates to:
+  /// **'no permission to call'**
+  String get noPermissionToCall;
+
+  /// No description provided for @chats.
+  ///
+  /// In en, this message translates to:
+  /// **'Chats'**
+  String get chats;
+
+  /// No description provided for @youDontHaveChatsYet.
+  ///
+  /// In en, this message translates to:
+  /// **'You don\'t have chats yet'**
+  String get youDontHaveChatsYet;
+
+  /// No description provided for @draft.
+  ///
+  /// In en, this message translates to:
+  /// **'draft'**
+  String get draft;
+
+  /// No description provided for @profileSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Profile saved!'**
+  String get profileSaved;
+
+  /// No description provided for @saveErrorTryAgain.
+  ///
+  /// In en, this message translates to:
+  /// **'Save error. Try again'**
+  String get saveErrorTryAgain;
+
+  /// No description provided for @editProfile.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit profile'**
+  String get editProfile;
+
+  /// No description provided for @saveChanges.
+  ///
+  /// In en, this message translates to:
+  /// **'Save changes'**
+  String get saveChanges;
+
+  /// No description provided for @nativeLanguage.
+  ///
+  /// In en, this message translates to:
+  /// **'Native language'**
+  String get nativeLanguage;
+
+  /// No description provided for @chooseNativeLanguage.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose native language'**
+  String get chooseNativeLanguage;
+
+  /// No description provided for @learningLanguages.
+  ///
+  /// In en, this message translates to:
+  /// **'Learning languages'**
+  String get learningLanguages;
+
+  /// No description provided for @youDidntAddAnyLanguage.
+  ///
+  /// In en, this message translates to:
+  /// **'You didn\'t add any language'**
+  String get youDidntAddAnyLanguage;
+
+  /// No description provided for @level.
+  ///
+  /// In en, this message translates to:
+  /// **'level'**
+  String get level;
+
+  /// No description provided for @addLearningLanguage.
+  ///
+  /// In en, this message translates to:
+  /// **'Add learning language'**
+  String get addLearningLanguage;
+
+  /// No description provided for @chooseLanguage.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose language'**
+  String get chooseLanguage;
+
+  /// No description provided for @knowledgeLevel.
+  ///
+  /// In en, this message translates to:
+  /// **'Knowledge level'**
+  String get knowledgeLevel;
+
+  /// No description provided for @add.
+  ///
+  /// In en, this message translates to:
+  /// **'add'**
+  String get add;
+
+  /// No description provided for @publications.
+  ///
+  /// In en, this message translates to:
+  /// **'Publications'**
+  String get publications;
+
+  /// No description provided for @failedToCreateChat.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to create chat'**
+  String get failedToCreateChat;
+
+  /// No description provided for @failedToLoadProfile.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to load profile'**
+  String get failedToLoadProfile;
+
+  /// No description provided for @aboutMyself.
+  ///
+  /// In en, this message translates to:
+  /// **'About myself'**
+  String get aboutMyself;
+
+  /// No description provided for @languages.
+  ///
+  /// In en, this message translates to:
+  /// **'Languages'**
+  String get languages;
+
+  /// No description provided for @noInformation.
+  ///
+  /// In en, this message translates to:
+  /// **'No information'**
+  String get noInformation;
+
+  /// No description provided for @failedToLoadChat.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to load chat'**
+  String get failedToLoadChat;
+
+  /// No description provided for @native.
+  ///
+  /// In en, this message translates to:
+  /// **'Native'**
+  String get native;
+
+  /// No description provided for @learn.
+  ///
+  /// In en, this message translates to:
+  /// **'Learn'**
+  String get learn;
+
+  /// No description provided for @age.
+  ///
+  /// In en, this message translates to:
+  /// **'Age'**
+  String get age;
+
+  /// No description provided for @country.
+  ///
+  /// In en, this message translates to:
+  /// **'Country'**
+  String get country;
+
+  /// No description provided for @heigh.
+  ///
+  /// In en, this message translates to:
+  /// **'Heigh'**
+  String get heigh;
+
+  /// No description provided for @recordVideo.
+  ///
+  /// In en, this message translates to:
+  /// **'Record video'**
+  String get recordVideo;
+
+  /// No description provided for @send.
+  ///
+  /// In en, this message translates to:
+  /// **'send'**
+  String get send;
+
+  /// No description provided for @notSpecified.
+  ///
+  /// In en, this message translates to:
+  /// **'not specified'**
+  String get notSpecified;
+
+  /// No description provided for @centimeters.
+  ///
+  /// In en, this message translates to:
+  /// **'cm'**
+  String get centimeters;
 }
 
 class _AppLocalizationsDelegate

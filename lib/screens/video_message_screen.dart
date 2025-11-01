@@ -3,6 +3,8 @@ import 'package:camera/camera.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 
+import '../l10n/app_localizations.dart';
+
 class VideoMessageScreen extends StatefulWidget {
   const VideoMessageScreen({super.key});
 
@@ -70,9 +72,10 @@ class _VideoMessageScreenState extends State<VideoMessageScreen> {
         body: Center(child: CircularProgressIndicator()),
       );
     }
+    final l10n = AppLocalizations.of(context)!;
 
     return Scaffold(
-      appBar: AppBar(title: const Text("Запись видео")),
+      appBar: AppBar(title: Text(l10n.recordVideo)),
       body: Column(
         children: [
           Expanded(child: CameraPreview(_cameraController!)),
@@ -89,7 +92,7 @@ class _VideoMessageScreenState extends State<VideoMessageScreen> {
               if (_videoPath != null)
                 ElevatedButton(
                   onPressed: _sendVideo,
-                  child: const Text("Отправить"),
+                  child: Text(l10n.send),
                 ),
             ],
           )
